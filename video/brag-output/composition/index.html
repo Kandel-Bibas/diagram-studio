@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en" data-resolution="landscape">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<style>
+  :root {
+    --page: #f4f2f0;
+    --ink: #0c0a08;
+    --ink-on-dark: #f4f2f0;
+    --accent: #e4f222;
+    --line: rgba(12, 10, 8, 0.12);
+    --card-bg: rgba(244, 242, 240, 0.95);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 1920px; height: 1080px; overflow: hidden;
+    background: var(--ink);
+    font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+    font-weight: 400;
+  }
+  #root { position: relative; width: 1920px; height: 1080px; }
+
+  .scene {
+    position: absolute; inset: 0; width: 1920px; height: 1080px;
+    overflow: hidden; opacity: 0;
+  }
+  .shot {
+    position: absolute; inset: 0; width: 1920px; height: 1080px;
+    display: block; will-change: transform, opacity;
+  }
+  .shot-base { opacity: 1; }
+  .shot-swap { opacity: 0; }
+
+  /* caption card — a quiet, near-opaque bone panel; same treatment in every light scene
+     regardless of what's under it, so contrast never depends on the screenshot content */
+  .caption {
+    position: absolute;
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 22px 32px;
+    color: var(--ink);
+    font-size: 40px;
+    line-height: 1.3;
+    font-weight: 400;
+    opacity: 0;
+    white-space: nowrap;
+  }
+  #cap-hook   { left: 620px; top: 610px; font-size: 46px; }
+  #cap-line1  { left: 220px; top: 700px; }
+  #cap-line2  { left: 220px; top: 700px; }
+  #cap-scale  { left: 1584px; top: 700px; width: 300px; font-size: 32px; white-space: nowrap; padding: 22px 28px; }
+  #cap-theme  { left: 1584px; top: 700px; width: 300px; font-size: 32px; white-space: nowrap; padding: 22px 28px; }
+
+  .cursor {
+    position: absolute; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--ink);
+    box-shadow: 0 0 0 4px rgba(244, 242, 240, 0.9);
+    opacity: 0;
+    transform: translate(-11px, -11px);
+  }
+
+  /* scene 5 — outro lockup */
+  #scene5 { background: var(--ink); }
+  .lockup {
+    position: absolute; left: 50%; top: 460px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 22px;
+    opacity: 0;
+  }
+  .swatch {
+    width: 56px; height: 56px; border-radius: 10px; background: var(--accent);
+    flex: none;
+  }
+  .wordmark {
+    color: var(--ink-on-dark); font-size: 84px; font-weight: 400; letter-spacing: -0.01em;
+  }
+  .tagline {
+    position: absolute; left: 50%; top: 588px; transform: translateX(-50%);
+    color: var(--ink-on-dark); font-size: 32px; font-weight: 400; opacity: 0.82;
+    opacity: 0;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-width="1920" data-height="1080" data-start="0" data-duration="21">
+
+  <!-- Scene 1 — Hook — 0.00–3.25 (nominal cut 3.00, crossfade to Scene 2 runs 2.75–3.25) -->
+  <div id="scene1" class="scene clip" data-start="0" data-duration="3.25" data-track-index="0">
+    <img class="shot shot-base" src="assets/img/a-empty.png" alt="" />
+    <div class="caption" id="cap-hook">Diagrams that cannot overlap.</div>
+  </div>
+
+  <!-- Scene 2 — Reveal — 2.75–8.74 (crossfade in 2.75–3.25, hard cut out at 8.74) -->
+  <div id="scene2" class="scene clip" data-start="2.75" data-duration="5.99" data-track-index="1">
+    <img class="shot shot-base" src="assets/img/b-starter.png" alt="" />
+    <img class="shot shot-swap" id="shot-selected" src="assets/img/c-starter-selected.png" alt="" />
+    <div class="cursor" id="cursor"></div>
+    <div class="caption" id="cap-line1">Nodes snap to the grid.</div>
+    <div class="caption" id="cap-line2">Edges route through the gutters.</div>
+  </div>
+
+  <!-- Scene 3 — Highlight: scale — 8.74–13.11 (hard cut in and out) -->
+  <div id="scene3" class="scene clip" data-start="8.74" data-duration="4.37" data-track-index="0">
+    <img class="shot shot-base" src="assets/img/d-ticketing.png" alt="" />
+    <div class="caption" id="cap-scale">Sixteen nodes.<br>Three zones.<br>Zero overlaps.</div>
+  </div>
+
+  <!-- Scene 4 — Highlight: light/dark — 13.11–17.72 (hard cut in, crossfade out 17.22–17.72) -->
+  <div id="scene4" class="scene clip" data-start="13.11" data-duration="4.61" data-track-index="1">
+    <img class="shot shot-base" src="assets/img/d-ticketing.png" alt="" />
+    <img class="shot shot-swap" id="shot-dark" src="assets/img/e-ticketing-dark.png" alt="" />
+    <div class="caption" id="cap-theme">Light or dark.<br>Same diagram.</div>
+  </div>
+
+  <!-- Scene 5 — Outro — 17.22–21.00 (crossfade in 17.22–17.72; title lands 18.56 beat-locked) -->
+  <div id="scene5" class="scene clip" data-start="17.22" data-duration="3.78" data-track-index="0">
+    <div class="lockup" id="lockup">
+      <div class="swatch"></div>
+      <div class="wordmark">Diagram Studio</div>
+    </div>
+    <div class="tagline" id="tagline">One HTML file. Nothing ever overlaps.</div>
+  </div>
+
+  <!-- Audio: one low bed (pre-faded in/out to the exact 21s duration) + three sparse SFX -->
+  <audio id="music" src="assets/music/bed-21s.mp3"
+    data-start="0" data-duration="21" data-track-index="10" data-volume="0.28"></audio>
+
+  <audio id="sfx-select" src="assets/sfx/interface/select_008.ogg"
+    data-start="4.55" data-duration="0.05" data-track-index="11" data-volume="0.6"></audio>
+
+  <audio id="sfx-bong" src="assets/sfx/interface/bong_001.ogg"
+    data-start="8.70" data-duration="0.13" data-track-index="12" data-volume="0.55"></audio>
+
+  <audio id="sfx-drop" src="assets/sfx/interface/drop_001.ogg"
+    data-start="18.56" data-duration="0.11" data-track-index="13" data-volume="0.6"></audio>
+
+</div>
+
+<script>
+  window.__timelines = window.__timelines || {};
+  var tl = gsap.timeline({ paused: true });
+
+  var EASE_SETTLE = "power2.out";
+
+  /* ---- Scene 1 : Hook (0 – 3.25) ---- */
+  tl.set("#scene1", { opacity: 1 }, 0);
+  tl.fromTo("#scene1 .shot", { scale: 1.03 }, { scale: 1.0, duration: 0.6, ease: EASE_SETTLE }, 0);
+  tl.fromTo("#cap-hook", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.4, ease: EASE_SETTLE }, 0.6);
+  tl.to("#scene1", { opacity: 0, duration: 0.5, ease: "none" }, 2.75);
+
+  /* ---- Scene 2 : Reveal (2.75 – 8.74) ---- */
+  tl.fromTo("#scene2", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "none" }, 2.75);
+  // cursor travels to the "Orders service" node and "clicks" it
+  tl.fromTo("#cursor", { opacity: 0, x: 260, y: 640 }, { opacity: 1, duration: 0.2 }, 3.40);
+  tl.to("#cursor", { x: 805, y: 294, duration: 1.2, ease: "power1.inOut" }, 3.40);
+  tl.to("#cursor", { scale: 1.5, duration: 0.12, ease: "power1.out" }, 4.60);
+  tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.in" }, 4.72);
+  tl.to("#cursor", { opacity: 0, duration: 0.2 }, 4.75);
+  // selection swap: unselected -> selected + inspector populated
+  tl.fromTo("#shot-selected", { opacity: 0 }, { opacity: 1, duration: 0.15, ease: "none" }, 4.60);
+  // sequential caption lines, each held to its reading floor
+  tl.fromTo("#cap-line1", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.3, ease: EASE_SETTLE }, 4.00);
+  tl.to("#cap-line1", { opacity: 0, duration: 0.15, ease: "none" }, 5.35);
+  tl.fromTo("#cap-line2", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.15, ease: EASE_SETTLE }, 5.50);
+  tl.set("#scene2", { opacity: 0 }, 8.74);
+
+  /* ---- Scene 3 : Highlight — scale (8.74 – 13.11) ---- */
+  tl.set("#scene3", { opacity: 1 }, 8.74);
+  tl.fromTo("#scene3 .shot", { scale: 1.03 }, { scale: 1.0, duration: 0.6, ease: EASE_SETTLE }, 8.74);
+  tl.fromTo("#cap-scale", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.3, ease: EASE_SETTLE }, 9.14);
+  tl.set("#scene3", { opacity: 0 }, 13.11);
+
+  /* ---- Scene 4 : Highlight — light/dark (13.11 – 17.72) ---- */
+  tl.set("#scene4", { opacity: 1 }, 13.11);
+  tl.fromTo("#shot-dark", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power1.inOut" }, 13.41);
+  tl.fromTo("#cap-theme", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.3, ease: EASE_SETTLE }, 13.41);
+  tl.to("#scene4", { opacity: 0, duration: 0.5, ease: "none" }, 17.22);
+
+  /* ---- Scene 5 : Outro (17.22 – 21.00) ---- */
+  tl.fromTo("#scene5", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "none" }, 17.22);
+  // title settles exactly on the beat-locked strong cue at 18.56s
+  tl.fromTo("#lockup", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.3, ease: EASE_SETTLE }, 18.26);
+  tl.fromTo("#tagline", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.3, ease: EASE_SETTLE }, 18.86);
+
+  tl.seek(0);
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>

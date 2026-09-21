@@ -1,0 +1,67 @@
+/* Bibas — design tokens (Ramp-inspired editorial monochrome + one highlighter accent).
+   Canonical source. Copy this block into a project's global stylesheet (or a document's
+   <style> tag) and build on the tokens — never hard-code a colour, radius, or font in a
+   component rule. Rules for using them: ~/.agents/design-system.md
+   Every colour is defined once with light-dark(); a theme toggle only flips color-scheme. */
+:root {
+  color-scheme: light dark;
+
+  /* surfaces */
+  --page:        light-dark(#f4f2f0, #0f0e0d);   /* Bone canvas | below Obsidian */
+  --surface:     light-dark(#ffffff, #1a1919);   /* Paper cards | Obsidian */
+  --fill:        light-dark(#f4f2f0, #262524);   /* Wash: callouts, hovers, table heads */
+  --inverse:     #1a1919;                        /* Obsidian: the one inverted panel, code blocks */
+  --on-inverse:  #f4f2f0;
+
+  /* lines — elevation is a hairline, never a shadow */
+  --line:        light-dark(#e5e7eb, #2e2d2c);   /* Hairline */
+  --line-strong: light-dark(#d3d3d3, #474543);   /* Smoke: inputs, stronger dividers */
+
+  /* text */
+  --ink:         light-dark(#0c0a08, #f4f2f0);   /* headings, values, emphasis */
+  --ink-2:       light-dark(#3b3937, #c9c6c2);   /* body copy */
+  --ink-3:       light-dark(#6d6c6b, #969390);   /* Ash: labels, captions, meta */
+
+  /* the one chromatic accent — identical in both themes. A FILL for action and live state.
+     Never text on a light surface (contrast), never a wash or decoration. */
+  --accent:      #e4f222;
+  --on-accent:   #0c0a08;
+
+  /* functional colours — encode meaning only (pass/fail, diff add/remove, errors). Not accents. */
+  --good:        light-dark(#1f6f47, #7ad3a3);
+  --good-fill:   light-dark(#e9f4ee, #16291f);
+  --warn:        light-dark(#8a5a00, #eec268);
+  --warn-fill:   light-dark(#f8f0de, #2e2514);
+  --bad:         light-dark(#a32018, #ff8f85);
+  --bad-fill:    light-dark(#fbeceb, #351c1a);
+
+  /* type — one family, one weight. Hierarchy comes from size and ink colour, never bold. */
+  --sans: "Lausanne", "Inter", "Söhne", "Helvetica Neue", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --weight: 400;
+  --text-caption: 13px;     --leading-caption: 1.45;
+  --text-small: 14px;       --leading-small: 1.5;
+  --text-body: 16px;        --leading-body: 1.5;
+  --text-subheading: 20px;  --leading-subheading: 1.3;
+  --text-heading-sm: 24px;  --leading-heading-sm: 1.17;
+  --text-heading: 28px;     --leading-heading: 1.14;
+  --text-heading-lg: 40px;  --leading-heading-lg: 1.05;
+  --text-display: 64px;     --leading-display: 1;
+  --tracking-display: -0.02em;   /* display and large headings only; body is 0 */
+
+  /* spacing — 4px base */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px;
+  --s-6: 40px; --s-7: 64px; --s-8: 128px;
+
+  /* radii — only these four */
+  --r-control: 6px;   /* buttons, tags, steps */
+  --r-input: 10px;    /* inputs, alerts */
+  --r-wash: 12px;     /* wash cards, callouts, inner panels */
+  --r-card: 16px;     /* content cards */
+
+  --control-h: 44px;
+  --page-max: 1200px;
+  --ease: 0.3s ease-out;   /* colour / background / border only — no transform theatrics */
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"]  { color-scheme: dark; }

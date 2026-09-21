@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagram Studio — diagrams that cannot overlap</title>
+<meta name="description" content="A visual editor for grid diagrams. Nodes sit in cells, edges run in the gutters, so labels never collide and edges never cut through boxes. One offline HTML file.">
+<meta property="og:title" content="Diagram Studio — diagrams that cannot overlap">
+<meta property="og:description" content="A visual editor for grid diagrams. Nodes sit in cells, edges run in the gutters, so labels never collide and edges never cut through boxes.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://diagram-studio.bibas.dev/">
+<meta property="og:image" content="https://diagram-studio.bibas.dev/media/brag.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Diagram Studio — diagrams that cannot overlap">
+<meta name="twitter:description" content="A visual editor for grid diagrams. Nodes sit in cells, edges run in the gutters, so labels never collide and edges never cut through boxes.">
+<meta name="twitter:image" content="https://diagram-studio.bibas.dev/media/brag.jpg">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='2' width='20' height='20' rx='3' fill='none' stroke='%230c0a08' stroke-width='2'/%3E%3Cpath d='M2 12h20M12 2v20' stroke='%230c0a08' stroke-width='2'/%3E%3C/svg%3E">
+<style>
+/*@TOKENS*/
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page); color: var(--ink-2);
+  font: var(--weight) var(--text-body)/var(--leading-body) var(--sans);
+}
+h1, h2, h3 { font-weight: var(--weight); color: var(--ink); margin: 0; }
+a { color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; font-weight: var(--weight); }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.container { max-width: var(--page-max); margin: 0 auto; padding-inline: var(--s-5); }   /* inline only: sections own their vertical rhythm */
+
+/* ---- top bar ---- */
+.topbar {
+  display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap;
+  padding: var(--s-3) var(--s-5); border-bottom: 1px solid var(--line); background: var(--surface);
+}
+.wordmark { font-size: var(--text-subheading); line-height: var(--leading-subheading); color: var(--ink); margin-right: auto; }
+.topbar nav { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+
+/* ---- buttons ---- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: var(--control-h); padding: 0 var(--s-4); border-radius: var(--r-control); border: 1px solid transparent;
+  background: transparent; cursor: pointer; white-space: nowrap; text-decoration: none; font-size: var(--text-body);
+  transition: background var(--ease), color var(--ease), border-color var(--ease);
+}
+.btn-primary { background: var(--accent); color: var(--on-accent); padding: 0 20px; }
+.btn-primary:hover { background: var(--ink); color: var(--page); }
+.btn-secondary { border-color: var(--ink); color: var(--ink); }
+.btn-secondary:hover { background: var(--fill); }
+.btn-quiet { color: var(--ink); padding: 0 var(--s-3); border-color: transparent; }
+.btn-quiet:hover { background: var(--fill); }
+
+/* ---- layout rhythm ---- */
+main { display: block; }
+section { padding: var(--s-7) 0; border-top: 1px solid var(--line); }
+section:first-of-type, .hero { border-top: none; }
+
+/* ---- hero ---- */
+.hero { padding-top: var(--s-7); padding-bottom: var(--s-6); }
+.hero h1 {
+  font-size: var(--text-display); line-height: var(--leading-display); letter-spacing: var(--tracking-display);
+  max-width: 18ch;
+}
+.hero .lede { font-size: var(--text-subheading); line-height: var(--leading-subheading); color: var(--ink-2); max-width: 56ch; margin: var(--s-4) 0 0; }
+.hero .actions { display: flex; gap: var(--s-3); flex-wrap: wrap; margin-top: var(--s-5); }
+.hero .note { font-size: var(--text-small); color: var(--ink-3); margin: var(--s-3) 0 0; }
+
+/* ---- section headings ---- */
+.eyebrow { font-size: var(--text-small); color: var(--ink-3); margin: 0 0 var(--s-4); }
+.features-section h2, .how-section h2 { font-size: var(--text-heading); line-height: var(--leading-heading); margin-bottom: var(--s-5); }
+.diagram-section h2 { font-size: var(--text-heading-sm); line-height: var(--leading-heading-sm); margin-bottom: var(--s-4); }
+
+/* ---- video ---- */
+.video-frame {
+  position: relative; aspect-ratio: 16 / 9; width: 100%;
+  background: var(--fill); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden;
+}
+.video-frame video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--fill); display: block; }
+.video-fallback {
+  position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+  margin: 0; padding: 0 var(--s-5); text-align: center; color: var(--ink-3); font-size: var(--text-small);
+}
+.video-frame.media-missing video { display: none; }
+.video-frame.media-missing .video-fallback { display: flex; }
+
+/* ---- diagram figure ---- */
+.diagram-section figure.diagram { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: var(--s-5); }   /* zones fill with --fill, which equals the page colour: they need a surface */
+.diagram-section figcaption { font-size: var(--text-small); color: var(--ink-3); margin-top: var(--s-3); }
+
+/* ---- features ---- */
+.feature-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; }
+.feature-grid li { padding: var(--s-4) 0; border-top: 1px solid var(--line); min-width: 0; }
+@media (min-width: 620px) {
+  .feature-grid { grid-template-columns: 1fr 1fr; }
+  .feature-grid li:nth-child(odd) { padding-right: var(--s-5); border-right: 1px solid var(--line); }
+  .feature-grid li:nth-child(even) { padding-left: var(--s-5); }
+}
+.feature-grid h3 { font-size: var(--text-body); margin-bottom: var(--s-1); }
+.feature-grid p { margin: 0; font-size: var(--text-small); color: var(--ink-2); }
+
+/* ---- how it works ---- */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-5); }
+@media (min-width: 620px) { .steps { grid-template-columns: repeat(3, 1fr); } }
+.steps li { display: flex; gap: var(--s-3); border-top: 1px solid var(--line); padding-top: var(--s-4); }
+.steps .step-num { color: var(--ink-3); font-size: var(--text-subheading); font-variant-numeric: tabular-nums; }
+.steps h3 { font-size: var(--text-body); margin-bottom: var(--s-1); }
+.steps p { margin: 0; font-size: var(--text-small); color: var(--ink-2); }
+
+/* ---- footer ---- */
+footer { border-top: 1px solid var(--line); padding: var(--s-5) 0 var(--s-7); }
+footer .container { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
+footer a { text-decoration: underline; text-decoration-color: var(--line-strong); }
+footer a:hover { text-decoration-color: var(--ink); }
+footer p { margin: 0; font-size: var(--text-small); color: var(--ink-3); }
+
+@media (max-width: 420px) {
+  .container { padding-inline: var(--s-4); }
+  .hero h1 { font-size: var(--text-heading-lg); }
+  .topbar { padding: var(--s-3) var(--s-4); }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <span class="wordmark">Diagram Studio</span>
+  <nav aria-label="Primary">
+    <a class="btn btn-quiet" href="https://github.com/Kandel-Bibas/diagram-studio">GitHub</a>
+    <a class="btn btn-secondary" href="/app/">Open the studio</a>
+    <button type="button" class="btn btn-quiet" id="theme" aria-label="Theme: follows system">Theme: system</button>
+  </nav>
+</header>
+
+<main>
+  <section class="hero container">
+    <h1>Architecture diagrams that cannot overlap.</h1>
+    <p class="lede">A visual editor for a grid layout engine: nodes sit in cells, edges run in the gutters, so labels never collide and edges never cut through boxes.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="/app/">Open the studio</a>
+      <a class="btn btn-secondary" href="/diagram-studio" download="diagram-studio.html">Download the single file</a>
+    </div>
+    <p class="note">One offline HTML file. No account, no install.</p>
+  </section>
+
+  <section class="video-section container" aria-labelledby="video-heading">
+    <p class="eyebrow" id="video-heading">See it in action</p>
+    <div class="video-frame" id="video-frame">
+      <video id="brag-video" src="/media/brag.mp4" poster="/media/brag.jpg" autoplay muted loop playsinline controls preload="metadata"></video>
+      <p class="video-fallback">The video could not load. Open the studio to try it instead.</p>
+    </div>
+  </section>
+
+  <section class="diagram-section container" aria-labelledby="diagram-heading">
+    <h2 id="diagram-heading">Under the hood</h2>
+    <figure class="diagram" data-scale="doc"><script type="application/json">{
+      "title": "How Diagram Studio works",
+      "nodes": [
+        {"id":"you",      "label":"You",        "col":0, "row":1, "kind":"term"},
+        {"id":"canvas",   "label":"Canvas",     "sub":"click · drag · connect", "col":1, "row":0, "kind":"key"},
+        {"id":"inspector","label":"Inspector",  "sub":"labels · kinds · zones", "col":1, "row":2, "kind":"key"},
+        {"id":"store",    "label":"Store",      "sub":"spec · undo · autosave", "col":2, "row":1, "kind":"db"},
+        {"id":"engine",   "label":"diagram.js", "sub":"grid layout · lint",    "col":3, "row":0, "kind":"hot"},
+        {"id":"export",   "label":"Export",     "sub":"figure · HTML · JSON",  "col":3, "row":1, "kind":"store"}
+      ],
+      "edges": [
+        {"from":"you",     "to":"canvas",    "hot":true},
+        {"from":"you",     "to":"inspector"},
+        {"from":"canvas",  "to":"store",     "hot":true},
+        {"from":"inspector","to":"store"},
+        {"from":"store",   "to":"engine",    "hot":true},
+        {"from":"engine",  "to":"export",    "hot":true}
+      ],
+      "groups": [
+        {"label":"You",    "caption":"clicks, drags, keyboard",     "rows":[0,2], "cols":[0,0]},
+        {"label":"Studio", "caption":"canvas · inspector · store.js","rows":[0,2], "cols":[1,2]},
+        {"label":"Engine", "caption":"renders, lints, exports",      "rows":[0,1], "cols":[3,3]}
+      ]
+    }</script></figure>
+    <figcaption>Rendered live by the same engine the studio uses.</figcaption>
+  </section>
+
+  <section class="features-section container" aria-labelledby="features-heading">
+    <h2 id="features-heading">Features</h2>
+    <ul class="feature-grid">
+      <li>
+        <h3>Grid-guaranteed layout</h3>
+        <p>Nodes sit in cells and edges run in the gutters, so nothing can overlap.</p>
+      </li>
+      <li>
+        <h3>Real engine, real lint</h3>
+        <p>Every change renders through the same diagram.js the page ships, lint included.</p>
+      </li>
+      <li>
+        <h3>Inspector for every field</h3>
+        <p>Labels, kinds, containers, edge routing, and zones — all editable.</p>
+      </li>
+      <li>
+        <h3>Export anywhere</h3>
+        <p>Copy the figure block, download standalone HTML, or copy the spec JSON — import any of them back.</p>
+      </li>
+      <li>
+        <h3>Keyboard first</h3>
+        <p>Arrow keys to move, Enter to add or select, C to connect, Delete, undo and redo.</p>
+      </li>
+      <li>
+        <h3>Offline single file</h3>
+        <p>Autosaves in the browser. Works light or dark, with no install.</p>
+      </li>
+    </ul>
+  </section>
+
+  <section class="how-section container" aria-labelledby="how-heading">
+    <h2 id="how-heading">How it works</h2>
+    <ol class="steps">
+      <li>
+        <span class="step-num">1</span>
+        <div><h3>Place</h3><p>Click an empty grid cell, or arrow to it and press Enter.</p></div>
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        <div><h3>Connect</h3><p>Drag a node's handle onto another, or press C and pick a target.</p></div>
+      </li>
+      <li>
+        <span class="step-num">3</span>
+        <div><h3>Export</h3><p>Copy the figure, download the HTML, or copy the JSON.</p></div>
+      </li>
+    </ol>
+  </section>
+</main>
+
+<footer>
+  <div class="container">
+    <p>Built by <a href="https://bibas.dev">Bibas Kandel</a></p>
+    <p>Powered by the diagram.js grid engine · <a href="https://github.com/Kandel-Bibas/diagram-studio">Source on GitHub</a></p>
+  </div>
+</footer>
+
+<script>
+/*@ENGINE*/
+</script>
+<script>
+(function () {
+  'use strict';
+  var THEME_KEY = 'diagram-studio:theme', THEMES = ['system', 'light', 'dark'];
+
+  function applyTheme(name) {
+    if (name === 'system') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', name);
+    var b = document.getElementById('theme');
+    b.textContent = 'Theme: ' + name;
+    b.setAttribute('aria-label', 'Theme: ' + (name === 'system' ? 'follows system' : name) + '. Change theme');
+  }
+  function initTheme() {
+    var name = 'system';
+    try { name = localStorage.getItem(THEME_KEY) || 'system'; } catch (e) { /* storage unavailable */ }
+    if (THEMES.indexOf(name) < 0) name = 'system';
+    applyTheme(name);
+    document.getElementById('theme').addEventListener('click', function () {
+      name = THEMES[(THEMES.indexOf(name) + 1) % THEMES.length];
+      applyTheme(name);
+      try { localStorage.setItem(THEME_KEY, name); } catch (e) { /* storage unavailable */ }
+      if (window.Diagram) window.Diagram.renderAll();               // label halos follow the theme
+    });
+  }
+  function initVideo() {
+    var frame = document.getElementById('video-frame'), video = document.getElementById('brag-video');
+    if (!frame || !video) return;
+    video.addEventListener('error', function () { frame.classList.add('media-missing'); });
+  }
+
+  initTheme();
+  initVideo();
+})();
+</script>
+</body>
+</html>

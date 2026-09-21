@@ -1,0 +1,7 @@
+tests/e2e.html
+site/
+.vercel/
+.DS_Store
+video/brag-output/brag.mp4
+video/brag-output/brag.jpg
+video/brag-output/composition/snapshots/

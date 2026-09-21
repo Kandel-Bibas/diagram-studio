@@ -1,0 +1,107 @@
+/* studio.css — app chrome and shared components. Tokens come from vendor/tokens.css; no raw colours here. */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--page); color: var(--ink-2);
+  font: var(--weight) var(--text-body)/var(--leading-body) var(--sans);
+  display: flex; flex-direction: column; min-height: 100vh;
+}
+h1, h2, h3, h4 { font-weight: var(--weight); color: var(--ink); margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; font-weight: var(--weight); }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ---- top bar ---- */
+.bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4);
+  padding: var(--s-3) var(--s-5); background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.app-name { font-size: var(--text-subheading); line-height: var(--leading-subheading); margin-right: var(--s-2); }
+.bar-group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); }
+.bar-spacer { flex: 1; }
+.zoom-level { min-width: 4.5ch; text-align: center; font-size: var(--text-small); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* ---- buttons (design-system components) ---- */
+.btn {
+  height: var(--control-h); padding: 0 var(--s-4); border-radius: var(--r-control); border: 1px solid transparent;
+  background: transparent; cursor: pointer; white-space: nowrap;
+  transition: background var(--ease), color var(--ease), border-color var(--ease);
+}
+.btn:disabled { color: var(--ink-3); cursor: default; }
+.btn-primary { background: var(--accent); color: var(--on-accent); padding: 0 20px; }
+.btn-primary:hover { background: var(--ink); color: var(--page); }
+.btn-secondary { border-color: var(--ink); color: var(--ink); }
+.btn-secondary:hover { background: var(--fill); }
+.btn-quiet { color: var(--ink); padding: 0 var(--s-3); }
+.btn-quiet:hover:not(:disabled) { background: var(--fill); }
+.btn-small { height: 32px; padding: 0 var(--s-3); font-size: var(--text-small); }
+.btn-danger { color: var(--bad); border-color: var(--bad); }
+.btn-danger:hover { background: var(--bad-fill); }
+
+/* ---- form fields ---- */
+.field { display: flex; flex-direction: column; gap: var(--s-1); margin-bottom: var(--s-3); }
+.field > label, .field-label { font-size: var(--text-caption); color: var(--ink-3); }
+.input, .select, .textarea {
+  width: 100%; min-height: var(--control-h); padding: 0 var(--s-4); background: transparent;
+  border: 1px solid var(--line-strong); border-radius: var(--r-input); color: var(--ink);
+  transition: border-color var(--ease);
+}
+.textarea { padding: var(--s-3) var(--s-4); font-family: var(--mono); font-size: var(--text-small); resize: vertical; min-height: 200px; }
+.input[aria-invalid="true"] { border-color: var(--bad); }
+.field-error { font-size: var(--text-caption); color: var(--bad); }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
+.check { display: flex; align-items: center; gap: var(--s-2); min-height: 32px; color: var(--ink); cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--ink); }
+
+/* ---- layout ---- */
+.layout { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0; }
+.workspace { min-width: 0; padding: var(--s-4) var(--s-5) var(--s-5); display: flex; flex-direction: column; gap: var(--s-3); }
+.hint { margin: 0; font-size: var(--text-caption); line-height: var(--leading-caption); color: var(--ink-3); max-width: 90ch; }
+.canvas-scroll {
+  flex: 1; min-height: 360px; overflow: auto; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r-card);
+}
+.stage-wrap { overflow: hidden; }
+.stage { position: relative; transform-origin: 0 0; padding: var(--s-5); }
+.stage .diagram { width: var(--figure-w, 1072px); }
+.overlay { position: absolute; left: 0; top: 0; overflow: visible; touch-action: none; cursor: default; }
+.overlay:focus-visible { outline: none; }
+.inspector {
+  border-left: 1px solid var(--line); background: var(--surface); padding: var(--s-5);
+  overflow-y: auto; max-height: calc(100vh - 69px); position: sticky; top: 0;
+}
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .inspector { border-left: 0; border-top: 1px solid var(--line); max-height: none; position: static; }
+  .bar { padding: var(--s-3) var(--s-4); }
+  .workspace { padding: var(--s-4); }
+}
+
+/* ---- overlay marks (drawn in diagram units) ---- */
+.ov-cell { fill: transparent; stroke: var(--line-strong); stroke-dasharray: 3 5; }
+.ov-cell.free:hover, .ov-cell.hover { fill: var(--fill); }
+.ov-plus { fill: var(--ink-3); pointer-events: none; }
+.ov-cursor { fill: none; stroke: var(--ink); stroke-dasharray: 6 4; pointer-events: none; }
+.ov-select { fill: none; stroke: var(--ink); pointer-events: none; }
+.ov-hover { fill: none; stroke: var(--ink-3); pointer-events: none; }
+.ov-edge-select { fill: none; stroke: var(--ink); stroke-linejoin: round; pointer-events: none; }
+.ov-ghost { fill: var(--fill); fill-opacity: 0.6; stroke: var(--ink); stroke-dasharray: 6 4; pointer-events: none; }
+.ov-ghost.invalid { fill: var(--bad-fill); stroke: var(--bad); }
+.ov-link { fill: none; stroke: var(--ink-2); stroke-dasharray: 6 5; pointer-events: none; }
+.ov-target { fill: none; stroke: var(--ink); pointer-events: none; }
+.ov-handle { fill: var(--surface); stroke: var(--ink); cursor: crosshair; }
+.ov-handle:hover { fill: var(--accent); }
+
+/* ---- lint ---- */
+.lint { font-size: var(--text-small); }
+.lint-ok { color: var(--ink-3); margin: 0; }
+.lint-list { margin: 0; padding: var(--s-3) var(--s-4); list-style: none; background: var(--bad-fill); border: 1px solid var(--bad); border-radius: var(--r-input); color: var(--ink); }
+.lint-list li + li { margin-top: var(--s-1); }
+
+/* ---- misc ---- */
+.sr-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.toast {
+  position: fixed; bottom: var(--s-5); left: 50%; transform: translateX(-50%);
+  background: var(--inverse); color: var(--on-inverse); padding: var(--s-3) var(--s-4); border-radius: var(--r-input);
+  font-size: var(--text-small); max-width: min(560px, calc(100vw - 32px));
+}

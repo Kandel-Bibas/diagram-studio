@@ -1,0 +1,30 @@
+/* panels.css — the inspector panels (src/inspector.js) and the import dialog (src/io.js). Tokens only. */
+
+.inspector h2 { font-size: var(--text-subheading); line-height: var(--leading-subheading); margin: 0 0 var(--s-3); }
+.inspector .insp-back { margin: 0 0 var(--s-4); }
+.inspector .check { margin-bottom: var(--s-3); }
+.inspector .btn-danger { margin-top: var(--s-5); width: 100%; }
+
+.insp-section { margin-bottom: var(--s-4); }
+.insp-action { margin-top: var(--s-2); }
+
+.insp-list { display: flex; flex-direction: column; gap: var(--s-1); margin-bottom: var(--s-1); }
+.insp-list .btn { width: 100%; text-align: left; justify-content: flex-start; }
+
+.insp-children { display: flex; flex-direction: column; gap: var(--s-2); margin-bottom: var(--s-1); }
+.insp-child-row { display: flex; align-items: center; gap: var(--s-2); }
+.insp-child-row .input { flex: 1; min-width: 0; }
+.insp-child-row .select { width: auto; flex: none; padding-right: var(--s-2); }
+.insp-child-row .btn { flex: none; width: 32px; padding: 0; font-size: var(--text-subheading); }
+
+/* ---- import dialog ---- */
+.import-dialog {
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-card);
+  padding: var(--s-5); width: min(640px, 100vw - 32px);
+}
+.import-dialog::backdrop { background: color-mix(in srgb, var(--inverse) 55%, transparent); }
+.import-dialog h2 { margin: 0 0 var(--s-3); }
+.import-dialog .field { margin-bottom: var(--s-4); }
+.import-dialog .import-note { font-size: var(--text-caption); color: var(--ink-3); margin: calc(-1 * var(--s-3)) 0 var(--s-4); }
+.import-dialog .field-error { margin-bottom: var(--s-4); }
+.import-dialog .import-actions { display: flex; justify-content: flex-end; gap: var(--s-2); }

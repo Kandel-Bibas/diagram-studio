@@ -1,0 +1,11 @@
+{
+  "name": "diagram-studio-brag",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes hyperframes@0.8.58 preview",
+    "check": "HYPERFRAMES_SKIP_SKILLS=1 npx --yes hyperframes@0.8.58 check",
+    "render": "npx --yes hyperframes@0.8.58 render",
+    "publish": "npx --yes hyperframes@0.8.58 publish"
+  }
+}

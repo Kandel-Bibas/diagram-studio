@@ -1,0 +1,1 @@
+Introducing Diagram Studio: a visual editor for grid diagrams that cannot overlap — nodes snap to cells, edges route through the gutters, the engine lints as you go. One offline HTML file.

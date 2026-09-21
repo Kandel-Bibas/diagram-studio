@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagram Studio</title>
+<style id="tokens">
+/*@TOKENS*/
+</style>
+<style>
+/*@CSS*/
+</style>
+</head>
+<body>
+<header class="bar">
+  <h1 class="app-name">Diagram Studio</h1>
+  <div class="bar-group" role="group" aria-label="History">
+    <button type="button" class="btn btn-quiet" id="undo" title="Undo (⌘Z)">Undo</button>
+    <button type="button" class="btn btn-quiet" id="redo" title="Redo (⇧⌘Z)">Redo</button>
+    <button type="button" class="btn btn-quiet" id="clear" title="Remove every node, edge and zone (undoable)">Clear</button>
+  </div>
+  <div class="bar-group" role="group" aria-label="Zoom">
+    <button type="button" class="btn btn-quiet" id="zoom-out" aria-label="Zoom out">−</button>
+    <output id="zoom-level" class="zoom-level" aria-live="polite">100%</output>
+    <button type="button" class="btn btn-quiet" id="zoom-in" aria-label="Zoom in">+</button>
+    <button type="button" class="btn btn-quiet" id="zoom-fit">Fit</button>
+  </div>
+  <div class="bar-spacer"></div>
+  <div class="bar-group" role="group" aria-label="Import and export">
+    <button type="button" class="btn btn-secondary" id="import">Import</button>
+    <button type="button" class="btn btn-secondary" id="copy-json">Copy spec JSON</button>
+    <button type="button" class="btn btn-secondary" id="copy-figure">Copy &lt;figure&gt;</button>
+    <button type="button" class="btn btn-primary" id="download-html">Download HTML</button>
+  </div>
+  <button type="button" class="btn btn-quiet" id="theme" aria-label="Theme: follows system">Theme: system</button>
+</header>
+
+<main class="layout">
+  <section class="workspace" aria-label="Canvas">
+    <p class="hint" id="hint">Click an empty cell to add a node. Drag a node to move it; drag its round handle onto another node to connect. Arrow keys move the cell cursor, Enter adds or selects, C connects, Delete removes.</p>
+    <div class="canvas-scroll" id="canvas-scroll">
+      <div class="stage-wrap" id="stage-wrap">
+        <div class="stage" id="stage">
+          <figure class="diagram" id="figure" data-scale="doc"><script type="application/json">{"nodes":[]}</script></figure>
+          <svg class="overlay" id="overlay" tabindex="0" role="application" aria-label="Diagram grid. Arrow keys move the cell cursor; Enter adds or selects; C starts a connection; Delete removes the selection." aria-describedby="cursor-status"></svg>
+        </div>
+      </div>
+    </div>
+    <p class="sr-status" id="cursor-status" aria-live="polite"></p>
+    <section class="lint" id="lint" aria-live="polite" aria-label="Lint"></section>
+  </section>
+  <aside class="inspector" id="inspector" aria-label="Inspector"></aside>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script id="dg-engine">
+/*@ENGINE*/
+</script>
+<script>
+/*@JS*/
+</script>
+</body>
+</html>
