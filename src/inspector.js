@@ -78,6 +78,41 @@
     select.value = selectedId;
   }
 
+  // ---- grid actions (insert/delete row/column), reused by the diagram panel (cursor) and the node panel (its cell) ----
+  function buildGridActions(container, describe, target) {
+    var grid = section(container, 'Grid');
+    var status = ce('p', { 'class': 'hint' });
+    status.textContent = describe();
+    grid.appendChild(status);
+    var actions = ce('div', { 'class': 'insp-grid-actions' });
+    function gridBtn(label, fn) {
+      var b = ce('button', { type: 'button', 'class': 'btn btn-secondary btn-small', text: label });
+      b.addEventListener('click', fn);
+      actions.appendChild(b);
+    }
+    gridBtn('Insert row above', function () { store.ops.insertRow(target().row); });
+    gridBtn('Insert row below', function () { store.ops.insertRow(target().row + 1); });
+    gridBtn('Delete row', function () { store.ops.deleteRow(target().row); });
+    gridBtn('Insert column left', function () { store.ops.insertCol(target().col); });
+    gridBtn('Insert column right', function () { store.ops.insertCol(target().col + 1); });
+    gridBtn('Delete column', function () { store.ops.deleteCol(target().col); });
+    grid.appendChild(actions);
+    return status;
+  }
+
+  // bounding rows/cols that cover a set of node ids, read from the rendered layout when it is available
+  // (falls back to the spec's own col/row/colspan, which is what the layout is built from anyway)
+  function nodesBBox(ids) {
+    var L = Studio.canvas && Studio.canvas.layout && Studio.canvas.layout();
+    var r0 = Infinity, r1 = -Infinity, c0 = Infinity, c1 = -Infinity;
+    ids.forEach(function (id) {
+      var g = L && L.nodes && L.nodes[id], n = store.node(id);
+      var row = g ? g.row : n.row, col = g ? g.col : n.col, span = g ? g.colspan : (n.colspan || 1);
+      r0 = Math.min(r0, row); r1 = Math.max(r1, row); c0 = Math.min(c0, col); c1 = Math.max(c1, col + span - 1);
+    });
+    return { rows: [r0, r1], cols: [c0, c1] };
+  }
+
   // ==================================================== panels ====================================================
 
   function renderDiagram() {
@@ -112,6 +147,31 @@
     interactiveLabel.appendChild(document.createTextNode('Interactive (focusable nodes, fires diagram:select)'));
     root.appendChild(interactiveLabel);
     regField(interactiveInput, function () { return !!store.get().interactive; }, 'checkbox');
+
+    var flowWrap = fieldWrap('Layout direction', 'f-flow');
+    var flowSelect = ce('select', { 'class': 'select', id: 'f-flow' });
+    flowSelect.appendChild(ce('option', { value: 'down', text: 'Down' }));
+    flowSelect.appendChild(ce('option', { value: 'right', text: 'Right' }));
+    flowSelect.value = spec.flow || 'down';
+    flowSelect.addEventListener('change', function () { store.update(function (s) { store.setField(s, 'flow', flowSelect.value, 'down'); }); });
+    flowWrap.appendChild(flowSelect);
+    root.appendChild(flowWrap);
+    regField(flowSelect, function () { return store.get().flow || 'down'; }, 'select');
+
+    var arrangeBtn = ce('button', { type: 'button', 'class': 'btn btn-secondary insp-action', text: 'Auto-arrange' });
+    arrangeBtn.addEventListener('click', function () { store.ops.autoArrange(store.get().flow || 'down'); });
+    root.appendChild(arrangeBtn);
+
+    var cursorStatus = buildGridActions(root, function () {
+      var c = Studio.canvas && Studio.canvas.cursor ? Studio.canvas.cursor() : { col: 0, row: 0 };
+      return 'Row ' + (c.row + 1) + ', column ' + (c.col + 1);
+    }, function () { return Studio.canvas && Studio.canvas.cursor ? Studio.canvas.cursor() : { col: 0, row: 0 }; });
+    if (Studio.canvas && Studio.canvas.onCursor) {
+      Studio.canvas.onCursor(function () {
+        var c = Studio.canvas.cursor();
+        cursorStatus.textContent = 'Row ' + (c.row + 1) + ', column ' + (c.col + 1);
+      });
+    }
 
     var zones = section(root, 'Zones');
     var zonesList = ce('div', { 'class': 'insp-list' });
@@ -183,6 +243,16 @@
     root.appendChild(kindWrap);
     regField(kindSelect, function () { return n.kind || 'default'; }, 'select');
 
+    var iconWrap = fieldWrap('Icon', 'f-icon');
+    var iconSelect = ce('select', { 'class': 'select', id: 'f-icon' });
+    iconSelect.appendChild(ce('option', { value: '', text: 'None' }));
+    Diagram.icons.forEach(function (ic) { iconSelect.appendChild(ce('option', { value: ic, text: ic })); });
+    iconSelect.value = n.icon || '';
+    iconSelect.addEventListener('change', function () { store.update(function () { store.setField(n, 'icon', iconSelect.value); }); });
+    iconWrap.appendChild(iconSelect);
+    root.appendChild(iconWrap);
+    regField(iconSelect, function () { return n.icon || ''; }, 'select');
+
     // col / row
     var crRow = ce('div', { 'class': 'field-row' });
     var colWrap = fieldWrap('Column', 'f-col'), rowWrap = fieldWrap('Row', 'f-row');
@@ -225,6 +295,8 @@
     regField(colspanInput, function () { return n.colspan || 1; }, 'text');
 
     buildStep(root, n);
+
+    buildGridActions(root, function () { return 'Row ' + (n.row + 1) + ', column ' + (n.col + 1); }, function () { return { col: n.col, row: n.row }; });
 
     // children
     var childrenSection = section(root, 'Children');
@@ -328,6 +400,14 @@
     root.appendChild(hotLabel);
     regField(hotInput, function () { return !!e.hot; }, 'checkbox');
 
+    var bothLabel = ce('label', { 'class': 'check', 'for': 'f-both' });
+    var bothInput = ce('input', { type: 'checkbox', id: 'f-both' });
+    bothInput.checked = !!e.both;
+    bothInput.addEventListener('change', function () { store.update(function () { store.setField(e, 'both', bothInput.checked); }); });
+    bothLabel.appendChild(bothInput); bothLabel.appendChild(document.createTextNode('Both ends'));
+    root.appendChild(bothLabel);
+    regField(bothInput, function () { return !!e.both; }, 'checkbox');
+
     var viaWrap = fieldWrap('Via', 'f-via');
     var viaSelect = ce('select', { 'class': 'select', id: 'f-via' });
     viaSelect.appendChild(ce('option', { value: '', text: 'Auto' }));
@@ -337,6 +417,26 @@
     viaWrap.appendChild(viaSelect);
     root.appendChild(viaWrap);
     regField(viaSelect, function () { return e.via || ''; }, 'select');
+
+    var exitWrap = fieldWrap('Leaves from', 'f-exit');
+    var exitSelect = ce('select', { 'class': 'select', id: 'f-exit' });
+    exitSelect.appendChild(ce('option', { value: '', text: 'Auto' }));
+    store.VIAS.forEach(function (v) { exitSelect.appendChild(ce('option', { value: v, text: v })); });
+    exitSelect.value = e.exit || '';
+    exitSelect.addEventListener('change', function () { store.update(function () { store.setField(e, 'exit', exitSelect.value); }); });
+    exitWrap.appendChild(exitSelect);
+    root.appendChild(exitWrap);
+    regField(exitSelect, function () { return e.exit || ''; }, 'select');
+
+    var enterWrap = fieldWrap('Arrives at', 'f-enter');
+    var enterSelect = ce('select', { 'class': 'select', id: 'f-enter' });
+    enterSelect.appendChild(ce('option', { value: '', text: 'Auto' }));
+    store.VIAS.forEach(function (v) { enterSelect.appendChild(ce('option', { value: v, text: v })); });
+    enterSelect.value = e.enter || '';
+    enterSelect.addEventListener('change', function () { store.update(function () { store.setField(e, 'enter', enterSelect.value); }); });
+    enterWrap.appendChild(enterSelect);
+    root.appendChild(enterWrap);
+    regField(enterSelect, function () { return e.enter || ''; }, 'select');
 
     buildStep(root, e);
 
@@ -369,34 +469,78 @@
     root.appendChild(capWrap);
     regField(capInput, function () { return g.caption || ''; }, 'text');
 
-    var gridErr = errEl('f-grid-err');
-    function buildRange(labelText, idPrefix, key) {
-      var row = ce('div', { 'class': 'field-row' });
-      var firstWrap = fieldWrap(labelText + ' first', idPrefix + '-first'), lastWrap = fieldWrap(labelText + ' last', idPrefix + '-last');
-      var firstInput = ce('input', { 'class': 'input', id: idPrefix + '-first', type: 'number', min: '0' });
-      var lastInput = ce('input', { 'class': 'input', id: idPrefix + '-last', type: 'number', min: '0' });
-      firstInput.value = g[key][0]; lastInput.value = g[key][1];
-      function commit() {
-        var first = parseInt(firstInput.value, 10), last = parseInt(lastInput.value, 10);
-        if (isNaN(first) || isNaN(last) || first < 0 || last < first) {
-          showError(gridErr, labelText + ' must satisfy 0 ≤ first ≤ last');
-          markInvalid(firstInput, true); markInvalid(lastInput, true);
-          firstInput.value = g[key][0]; lastInput.value = g[key][1];
-          return;
+    if (g.nodes) {
+      var membersSection = section(root, 'Members');
+      var membersErr = errEl('f-members-err');
+      var checklist = ce('div', { 'class': 'insp-checklist' });
+      store.get().nodes.forEach(function (n) {
+        var cid = 'f-member-' + n.id;
+        var lab = ce('label', { 'class': 'check', 'for': cid });
+        var cb = ce('input', { type: 'checkbox', id: cid });
+        cb.checked = g.nodes.indexOf(n.id) >= 0;
+        cb.addEventListener('change', function () {
+          if (!cb.checked && g.nodes.length === 1 && g.nodes[0] === n.id) {
+            cb.checked = true; showError(membersErr, 'A zone needs at least one node'); return;
+          }
+          showError(membersErr, null);
+          store.update(function () {
+            if (cb.checked) { if (g.nodes.indexOf(n.id) < 0) g.nodes.push(n.id); }
+            else g.nodes = g.nodes.filter(function (id) { return id !== n.id; });
+          });
+        });
+        lab.appendChild(cb); lab.appendChild(document.createTextNode(n.label + ' (' + n.id + ')'));
+        checklist.appendChild(lab);
+        regField(cb, function () { return g.nodes.indexOf(n.id) >= 0; }, 'checkbox');
+      });
+      membersSection.appendChild(checklist);
+      membersSection.appendChild(membersErr);
+
+      var toRowsBtn = ce('button', { type: 'button', 'class': 'btn btn-secondary btn-small insp-action', text: 'Use rows and columns instead' });
+      toRowsBtn.addEventListener('click', function () {
+        var bbox = nodesBBox(g.nodes);
+        store.update(function () { delete g.nodes; g.rows = bbox.rows; g.cols = bbox.cols; });
+      });
+      root.appendChild(toRowsBtn);
+    } else {
+      var gridErr = errEl('f-grid-err');
+      var buildRange = function (labelText, idPrefix, key) {
+        var row = ce('div', { 'class': 'field-row' });
+        var firstWrap = fieldWrap(labelText + ' first', idPrefix + '-first'), lastWrap = fieldWrap(labelText + ' last', idPrefix + '-last');
+        var firstInput = ce('input', { 'class': 'input', id: idPrefix + '-first', type: 'number', min: '0' });
+        var lastInput = ce('input', { 'class': 'input', id: idPrefix + '-last', type: 'number', min: '0' });
+        firstInput.value = g[key][0]; lastInput.value = g[key][1];
+        function commit() {
+          var first = parseInt(firstInput.value, 10), last = parseInt(lastInput.value, 10);
+          if (isNaN(first) || isNaN(last) || first < 0 || last < first) {
+            showError(gridErr, labelText + ' must satisfy 0 ≤ first ≤ last');
+            markInvalid(firstInput, true); markInvalid(lastInput, true);
+            firstInput.value = g[key][0]; lastInput.value = g[key][1];
+            return;
+          }
+          showError(gridErr, null); markInvalid(firstInput, false); markInvalid(lastInput, false);
+          store.update(function () { g[key] = [first, last]; });
         }
-        showError(gridErr, null); markInvalid(firstInput, false); markInvalid(lastInput, false);
-        store.update(function () { g[key] = [first, last]; });
-      }
-      firstInput.addEventListener('change', commit); lastInput.addEventListener('change', commit);
-      firstWrap.appendChild(firstInput); lastWrap.appendChild(lastInput);
-      row.appendChild(firstWrap); row.appendChild(lastWrap);
-      root.appendChild(row);
-      regField(firstInput, function () { return g[key][0]; }, 'text');
-      regField(lastInput, function () { return g[key][1]; }, 'text');
+        firstInput.addEventListener('change', commit); lastInput.addEventListener('change', commit);
+        firstWrap.appendChild(firstInput); lastWrap.appendChild(lastInput);
+        row.appendChild(firstWrap); row.appendChild(lastWrap);
+        root.appendChild(row);
+        regField(firstInput, function () { return g[key][0]; }, 'text');
+        regField(lastInput, function () { return g[key][1]; }, 'text');
+      };
+      buildRange('Rows', 'f-rows', 'rows');
+      buildRange('Cols', 'f-cols', 'cols');
+      root.appendChild(gridErr);
+
+      var toNodesBtn = ce('button', { type: 'button', 'class': 'btn btn-secondary btn-small insp-action', text: 'Follow nodes instead' });
+      toNodesBtn.addEventListener('click', function () {
+        var ids = store.get().nodes.filter(function (n) {
+          return n.row >= g.rows[0] && n.row <= g.rows[1] && n.col + (n.colspan || 1) - 1 >= g.cols[0] && n.col <= g.cols[1];
+        }).map(function (n) { return n.id; });
+        if (!ids.length) { Studio.toast('No nodes sit inside this zone — cannot convert'); return; }
+        store.update(function () { delete g.rows; delete g.cols; g.nodes = ids; });
+      });
+      root.appendChild(toNodesBtn);
     }
-    buildRange('Rows', 'f-rows', 'rows');
-    buildRange('Cols', 'f-cols', 'cols');
-    root.appendChild(gridErr);
 
     buildStep(root, g);
 
@@ -405,13 +549,57 @@
     root.appendChild(delBtn);
   }
 
+  function renderMulti(nodes) {
+    root.appendChild(h2(nodes.length + ' nodes selected'));
+    root.appendChild(backButton());
+
+    var makeZoneBtn = ce('button', { type: 'button', 'class': 'btn btn-secondary insp-action', text: 'Make zone' });
+    makeZoneBtn.addEventListener('click', function () { store.ops.addZoneAround(nodes.map(function (n) { return n.id; })); });
+    root.appendChild(makeZoneBtn);
+
+    var dupBtn = ce('button', { type: 'button', 'class': 'btn btn-secondary insp-action', text: 'Duplicate' });
+    dupBtn.addEventListener('click', function () {
+      if (Studio.canvas && Studio.canvas.duplicate) { Studio.canvas.duplicate(); return; }
+      var clip = store.ops.copy(nodes.map(function (n) { return n.id; }));
+      if (clip) store.ops.paste(clip, 0, 0);
+    });
+    root.appendChild(dupBtn);
+
+    var kindWrap = fieldWrap('Kind', 'f-kind');
+    var kindSelect = ce('select', { 'class': 'select', id: 'f-kind' });
+    var kinds = nodes.map(function (n) { return n.kind || 'default'; });
+    var mixed = kinds.some(function (k) { return k !== kinds[0]; });
+    kindSelect.appendChild(ce('option', { value: '', text: 'Mixed' }));
+    store.KINDS.forEach(function (k) { kindSelect.appendChild(ce('option', { value: k, text: k })); });
+    kindSelect.value = mixed ? '' : kinds[0];
+    kindSelect.addEventListener('change', function () {
+      if (!kindSelect.value) return;
+      store.update(function () { nodes.forEach(function (n) { store.setField(n, 'kind', kindSelect.value, 'default'); }); });
+    });
+    kindWrap.appendChild(kindSelect);
+    root.appendChild(kindWrap);
+    regField(kindSelect, function () {
+      var ks = nodes.map(function (n) { return n.kind || 'default'; });
+      return ks.every(function (k) { return k === ks[0]; }) ? ks[0] : '';
+    }, 'select');
+
+    var delBtn = ce('button', { type: 'button', 'class': 'btn btn-danger', text: 'Delete' });
+    delBtn.addEventListener('click', function () { store.ops.deleteNodes(nodes.map(function (n) { return n.id; })); });
+    root.appendChild(delBtn);
+
+    var count = ce('p', { 'class': 'insp-multi-count' });
+    count.textContent = nodes.length + ' nodes';
+    root.appendChild(count);
+  }
+
   // ==================================================== sync / rebuild ====================================================
 
   function signature(sel) {
     if (!sel) { var s = store.get(); return 'none:' + s.nodes.length + ':' + (s.edges || []).length + ':' + (s.groups || []).length; }
     if (sel.type === 'node') { var n = store.node(sel.id); return n ? 'node:' + sel.id + ':' + (n.children ? n.children.length : 0) : null; }
+    if (sel.type === 'nodes') { var ids = sel.ids.filter(function (id) { return store.node(id); }).slice().sort(); return ids.length > 1 ? 'nodes:' + ids.join(',') : null; }
     if (sel.type === 'edge') { return (store.get().edges || [])[sel.index] ? 'edge:' + sel.index : null; }
-    if (sel.type === 'group') { return (store.get().groups || [])[sel.index] ? 'group:' + sel.index : null; }
+    if (sel.type === 'group') { return (store.get().groups || [])[sel.index] ? 'group:' + (store.get().groups[sel.index].nodes ? 'n' : 'r') + ':' + sel.index : null; }
     return 'none';
   }
 
@@ -420,6 +608,7 @@
     while (root.firstChild) root.removeChild(root.firstChild);
     var sel = store.selection();
     if (sel && sel.type === 'node' && store.node(sel.id)) renderNode(store.node(sel.id));
+    else if (sel && sel.type === 'nodes' && store.selected()) renderMulti(store.selected());
     else if (sel && sel.type === 'edge' && (store.get().edges || [])[sel.index]) renderEdge(store.get().edges[sel.index], sel.index);
     else if (sel && sel.type === 'group' && (store.get().groups || [])[sel.index]) renderGroup(store.get().groups[sel.index], sel.index);
     else renderDiagram();

@@ -179,17 +179,31 @@
     check('undo after Clear restores everything', JSON.stringify(S.get()) === before, JSON.stringify(S.get()).slice(0, 200));
   }
 
+  // Other test files (tests/e2e-*.js, appended after this one) register suites with E2E.suite(name, fn);
+  // fn may return a promise. Suites run in order after the built-in ones, each from whatever state the last left.
+  var extra = [];
+  window.E2E = {
+    suite: function (name, fn) { extra.push([name, fn]); },
+    check: check, canon: canon, fire: fire, click: click, dragTo: dragTo, key: key, nodeCenter: nodeCenter
+  };
   function run() {
     S = Studio.store; C = Studio.canvas; overlay = document.getElementById('overlay');
     overlay.setPointerCapture = function () {}; overlay.hasPointerCapture = function () { return false; };   // synthetic pointers are never "active"
-    [['rebuild by mouse', rebuildByMouse], ['interactions', interactions], ['inspector', inspector], ['round trip', roundTrip]].forEach(function (t) {
-      try { t[1](); } catch (err) { check(t[0] + ' threw', false, err.message + ' @ ' + (err.stack || '').split('\n')[1]); }
+    var suites = [['rebuild by mouse', rebuildByMouse], ['interactions', interactions], ['inspector', inspector], ['round trip', roundTrip]].concat(extra);
+    var SUITE_MS = 10000;                                           // a suite that never settles fails; it must not hang the run
+    suites.reduce(function (prev, t) {
+      return prev.then(function () {
+        console.log('e2e suite: ' + t[0]);
+        var timer, limit = new Promise(function (_, reject) { timer = setTimeout(function () { reject(new Error('did not finish within ' + SUITE_MS / 1000 + ' s')); }, SUITE_MS); });
+        return Promise.race([Promise.resolve().then(function () { return t[1](); }), limit]).then(function () { clearTimeout(timer); }, function (err) { clearTimeout(timer); throw err; });
+      }).catch(function (err) { check(t[0] + ' threw', false, err.message + ' @ ' + (err.stack || '').split('\n')[1]); });
+    }, Promise.resolve()).then(function () {
+      var failed = results.filter(function (r) { return !r.ok; });
+      var pre = document.createElement('pre'); pre.id = 'e2e-result';
+      pre.textContent = JSON.stringify({ pass: failed.length === 0, total: results.length, failed: failed.length, results: results });
+      document.body.appendChild(pre);
+      if (/[?&]e2e-show\b/.test(location.search)) S.replace(TARGET);
     });
-    var failed = results.filter(function (r) { return !r.ok; });
-    var pre = document.createElement('pre'); pre.id = 'e2e-result';
-    pre.textContent = JSON.stringify({ pass: failed.length === 0, total: results.length, failed: failed.length, results: results });
-    document.body.appendChild(pre);
-    if (/[?&]e2e-show\b/.test(location.search)) S.replace(TARGET);
   }
   window.addEventListener('load', function () { setTimeout(run, 50); });
 })();

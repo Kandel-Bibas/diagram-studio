@@ -5,10 +5,17 @@
  * is always somewhere to add) are extrapolated with the engine's own pitch: colX = gx + c·(colW + gx), and
  * rows after the last continue at cellH + gy.
  *
- * Pointer:   empty cell click → add node · drag node → move (snaps to a cell) · drag handle / shift-drag node → edge
- *            click edge → select · click zone margin → select zone · click gutter → clear selection
- * Keyboard (overlay focused): arrows move the cell cursor · shift+arrows move the selected node · Enter adds / selects
- *            / completes a connection · C starts a connection from the selected node · Delete · Esc
+ * Pointer:   empty cell click → add node · drag node → move (snaps to a cell; dragging a node that is part of a
+ *            multi-selection moves the whole set) · drag handle / shift-drag node → edge · shift/cmd/ctrl-click a
+ *            node (no drag) → toggle it in/out of the selection · drag from an empty cell or a gutter past the
+ *            drag threshold → marquee-select every node it touches · click edge → select · click zone margin →
+ *            select zone · click gutter → clear selection · hover the left/top margin of a row/column → small
+ *            +/- controls to insert or delete it
+ * Keyboard (overlay focused): arrows move the cell cursor · shift+arrows move the selected node(s) · Enter adds /
+ *            selects / completes a connection · C starts a connection from the selected node · Delete/Backspace
+ *            removes the selection · Esc clears it · Cmd/Ctrl+A selects all nodes · Cmd/Ctrl+C / X / V / D copy /
+ *            cut / paste / duplicate · Alt+Shift+ArrowDown/ArrowRight insert a row/column at the cursor ·
+ *            Alt+Shift+Backspace/Delete remove the cursor's row/column
  */
 (function () {
   'use strict';
@@ -20,9 +27,10 @@
 
   var store, fig, script, overlay, stage, wrap, scroller, status;
   var L = null, zoom = 1, userZoomed = false;
-  var hover = { node: null, cell: null }, cursor = { col: 0, row: 0 }, focused = false, connectFrom = null;
-  var press = null, drag = null;                                   // press: pointer down, not yet a drag; drag: move | link
+  var hover = { node: null, cell: null, rowMargin: null, colMargin: null }, cursor = { col: 0, row: 0 }, focused = false, connectFrom = null;
+  var press = null, drag = null;                                   // press: pointer down, not yet a drag; drag: move | link | marquee
   var layers = {};
+  var clip = null, cursorSubs = [];                                 // clip: in-memory clipboard (system clipboard is best-effort, blocked on file://)
 
   function el(name, attrs, parent) {
     var e = document.createElementNS(NS, name);
@@ -84,6 +92,66 @@
     for (var i = L.groups.length - 1; i >= 0; i--) if (inside(p, L.groups[i]) && !cellAt(p)) return i;
     return -1;
   }
+  function marginRowAt(p) {                                         // row whose left-margin (x < first column's left edge) contains p
+    if (p.x < 0 || p.x >= L.gx) return null;
+    for (var r = 0; r < extRows(); r++) if (p.y >= rowY(r) && p.y <= rowY(r) + rowH(r)) return r;
+    return null;
+  }
+  function marginColAt(p) {                                         // column whose top margin (y < first row's top) contains p
+    var top = rowY(0);
+    if (p.y < 0 || p.y >= top) return null;
+    for (var c = 0; c < extCols(); c++) if (p.x >= colX(c) && p.x <= colX(c) + L.colW) return c;
+    return null;
+  }
+  function marginBtnAt(p) {                                         // {axis:'row'|'col', index, action:'insert'|'delete'} on a margin +/- control
+    var u = unitsPerPx(), s = 9 * u, rm = marginRowAt(p);
+    if (rm !== null) {
+      var rb = cellRect(0, rm), cy = rb.y + rb.h / 2;
+      if (Math.abs(p.y - cy) <= s) {
+        if (Math.abs(p.x - L.gx * 0.28) <= s) return { axis: 'row', index: rm, action: 'insert' };
+        if (Math.abs(p.x - L.gx * 0.72) <= s) return { axis: 'row', index: rm, action: 'delete' };
+      }
+    }
+    var cm = marginColAt(p);
+    if (cm !== null) {
+      var cb = cellRect(cm, 0), cx = cb.x + cb.w / 2, top = rowY(0);
+      if (Math.abs(p.x - cx) <= s) {
+        if (Math.abs(p.y - top * 0.28) <= s) return { axis: 'col', index: cm, action: 'insert' };
+        if (Math.abs(p.y - top * 0.72) <= s) return { axis: 'col', index: cm, action: 'delete' };
+      }
+    }
+    return null;
+  }
+  function rectsOverlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
+  function marqueeRect(a, b) { return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) }; }
+  function movePreviewValid(ids, dc, dr) {                          // dry-run of store.ops.moveNodes(ids, dc, dr): true if it would succeed
+    var moving = {}; ids.forEach(function (id) { moving[id] = true; });
+    return ids.every(function (id) {
+      var n = store.node(id), c = n.col + dc, r = n.row + dr;
+      if (c < 0 || r < 0) return false;
+      for (var k = c; k < c + (n.colspan || 1); k++) { var o = store.occupant(k, r); if (o && !moving[o]) return false; }
+      return true;
+    });
+  }
+  function rectUnion(rs) {
+    var x0 = Math.min.apply(null, rs.map(function (r) { return r.x; })), y0 = Math.min.apply(null, rs.map(function (r) { return r.y; }));
+    var x1 = Math.max.apply(null, rs.map(function (r) { return r.x + r.w; })), y1 = Math.max.apply(null, rs.map(function (r) { return r.y + r.h; }));
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
+  function selectionBounds(sel) {                                   // the geometry (diagram units) a selection covers, or null
+    if (!sel || !L) return null;
+    if (sel.type === 'node') return L.nodes[sel.id] ? rectUnion([L.nodes[sel.id]]) : null;
+    if (sel.type === 'nodes') { var rs = sel.ids.map(function (id) { return L.nodes[id]; }).filter(Boolean); return rs.length ? rectUnion(rs) : null; }
+    if (sel.type === 'group') return L.groups[sel.index] ? rectUnion([L.groups[sel.index]]) : null;
+    if (sel.type === 'edge') {
+      var pts = edgePoints(sel.index); if (!pts) return null;
+      var xs = pts.map(function (q) { return q[0]; }), ys = pts.map(function (q) { return q[1]; });
+      return { x: Math.min.apply(null, xs), y: Math.min.apply(null, ys), w: Math.max.apply(null, xs) - Math.min.apply(null, xs), h: Math.max.apply(null, ys) - Math.min.apply(null, ys) };
+    }
+    return null;
+  }
+  function notifyCursor() { cursorSubs.forEach(function (fn) { fn({ col: cursor.col, row: cursor.row }); }); }
+  function setCursor(c, r) { cursor = { col: c, row: r }; notifyCursor(); }
   function handlePos(id) { var n = L.nodes[id]; return { x: n.x + n.w, y: n.y + n.h / 2 }; }
   function handleAt(p) {
     var ids = [hover.node, selectedNodeId()].filter(Boolean), r = (HANDLE_PX + 3) * unitsPerPx();
@@ -147,6 +215,12 @@
     [layers.marks, layers.drag, layers.handles].forEach(function (g) { while (g.firstChild) g.firstChild.remove(); });
     var sel = store.selection(), pad = 5 * u, stroke = { 'vector-effect': 'non-scaling-stroke' };
     function box(r, cls, p, sw) { return el('rect', Object.assign({ 'class': cls, x: r.x - p, y: r.y - p, width: r.w + 2 * p, height: r.h + 2 * p, rx: 12, 'stroke-width': sw }, stroke), layers.marks); }
+    function marginBtn(cx, cy, s, kind) {
+      var g = el('g', { 'class': 'ov-margin-btn' }, layers.marks), half = s * 0.5;
+      el('rect', Object.assign({ x: cx - s, y: cy - s, width: 2 * s, height: 2 * s, rx: 6 }, stroke), g);
+      var d = kind === 'insert' ? 'M' + (cx - half) + ',' + cy + 'h' + (2 * half) + ' M' + cx + ',' + (cy - half) + 'v' + (2 * half) : 'M' + (cx - half) + ',' + cy + 'h' + (2 * half);
+      el('path', Object.assign({ d: d }, stroke), g);
+    }
 
     if (hover.cell && !drag && !store.occupant(hover.cell.col, hover.cell.row)) {
       var hb = cellRect(hover.cell.col, hover.cell.row), s = 7 * u;
@@ -155,6 +229,7 @@
     }
     if (hover.node && L.nodes[hover.node] && hover.node !== selectedNodeId()) box(L.nodes[hover.node], 'ov-hover', pad, 1);
     if (sel && sel.type === 'node' && L.nodes[sel.id]) box(L.nodes[sel.id], 'ov-select', pad, 2);
+    if (sel && sel.type === 'nodes') sel.ids.forEach(function (id) { if (L.nodes[id]) box(L.nodes[id], 'ov-select', pad, 2); });
     if (sel && sel.type === 'group' && L.groups[sel.index]) box(L.groups[sel.index], 'ov-select', 0, 2);
     if (sel && sel.type === 'edge') {
       var pts = edgePoints(sel.index);
@@ -167,8 +242,14 @@
     }
 
     if (drag && drag.type === 'move') {
-      var n = store.node(drag.id), g = cellRect(drag.target.col, drag.target.row, n.colspan || 1);
-      el('rect', Object.assign({ 'class': 'ov-ghost' + (drag.valid ? '' : ' invalid'), x: g.x, y: g.y, width: g.w, height: g.h, rx: 10, 'stroke-width': 1.5 }, stroke), layers.drag);
+      drag.ids.forEach(function (id) {
+        var n = store.node(id), g = cellRect(n.col + drag.dc, n.row + drag.dr, n.colspan || 1);
+        el('rect', Object.assign({ 'class': 'ov-ghost' + (drag.valid ? '' : ' invalid'), x: g.x, y: g.y, width: g.w, height: g.h, rx: 10, 'stroke-width': 1.5 }, stroke), layers.drag);
+      });
+    }
+    if (drag && drag.type === 'marquee') {
+      var mr = marqueeRect(drag.from, drag.to);
+      el('rect', Object.assign({ 'class': 'ov-marquee', x: mr.x, y: mr.y, width: mr.w, height: mr.h }, stroke), layers.drag);
     }
     var linkFrom = drag && drag.type === 'link' ? drag.from : connectFrom;
     if (linkFrom && L.nodes[linkFrom]) {
@@ -184,48 +265,67 @@
       var h = handlePos(id);
       el('circle', Object.assign({ 'class': 'ov-handle', cx: h.x, cy: h.y, r: HANDLE_PX * u, 'stroke-width': 1.5 }, stroke), layers.handles);
     });
+    if (!drag) {
+      if (hover.rowMargin !== null) {
+        var rb = cellRect(0, hover.rowMargin), rcy = rb.y + rb.h / 2, s1 = 9 * u;
+        marginBtn(L.gx * 0.28, rcy, s1, 'insert'); marginBtn(L.gx * 0.72, rcy, s1, 'delete');
+      }
+      if (hover.colMargin !== null) {
+        var cb2 = cellRect(hover.colMargin, 0), ccx = cb2.x + cb2.w / 2, top = rowY(0), s2 = 9 * u;
+        marginBtn(ccx, top * 0.28, s2, 'insert'); marginBtn(ccx, top * 0.72, s2, 'delete');
+      }
+    }
   }
 
   // ---- pointer ----
   function onDown(ev) {
     if (ev.button !== 0 || !L) return;
     overlay.focus({ preventScroll: true });
-    var p = toUnits(ev), h = handleAt(p), id = h ? null : nodeAt(p);
+    var p = toUnits(ev), mb = marginBtnAt(p), h = mb ? null : handleAt(p), id = h ? null : nodeAt(p);
     overlay.setPointerCapture(ev.pointerId);
+    if (mb) { press = { kind: 'margin', mb: mb, u: p, x: ev.clientX, y: ev.clientY }; return; }
     if (h) { press = { kind: 'handle', id: h, x: ev.clientX, y: ev.clientY }; return; }
     if (id) {
-      var n = store.node(id), c = nearestCell(p);
-      store.select({ type: 'node', id: id }); cursor = { col: n.col, row: n.row };
-      press = { kind: ev.shiftKey ? 'handle' : 'node', id: id, grab: Math.max(0, Math.min((n.colspan || 1) - 1, c.col - n.col)), x: ev.clientX, y: ev.clientY };
+      var n = store.node(id), c = nearestCell(p), toggle = ev.shiftKey || ev.metaKey || ev.ctrlKey;
+      var cur = store.selection(), inSet = cur && cur.type === 'nodes' && cur.ids.indexOf(id) >= 0;
+      setCursor(n.col, n.row);
+      if (!toggle && !inSet) store.select({ type: 'node', id: id });
+      press = { kind: toggle ? 'handle' : 'node', id: id, toggle: toggle, grab: Math.max(0, Math.min((n.colspan || 1) - 1, c.col - n.col)), x: ev.clientX, y: ev.clientY };
       return;
     }
     var ei = edgeAt(p);
     if (ei >= 0) { store.select({ type: 'edge', index: ei }); press = null; return; }
     var cell = cellAt(p);
-    if (cell) { press = { kind: 'cell', cell: cell, x: ev.clientX, y: ev.clientY }; return; }
-    var gi = groupAt(p);
-    store.select(gi >= 0 ? { type: 'group', index: gi } : null);
-    press = null;
+    var gi = cell ? -1 : groupAt(p);
+    press = { kind: cell ? 'cell' : 'gutter', cell: cell, gi: gi, u: p, x: ev.clientX, y: ev.clientY };
   }
   function onMove(ev) {
     if (!L) return;
     var p = toUnits(ev);
     if (press && !drag && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) > DRAG_PX) {
-      if (press.kind === 'cell') press = null;                     // a drag that starts on an empty cell adds nothing
-      else if (press.kind === 'node') drag = { type: 'move', id: press.id, grab: press.grab };
+      if (press.kind === 'cell' || press.kind === 'gutter' || press.kind === 'margin') drag = { type: 'marquee', from: press.u, to: p };
+      else if (press.kind === 'node') {
+        var selNow = store.selection();
+        var ids = (selNow && selNow.type === 'nodes' && selNow.ids.indexOf(press.id) >= 0) ? selNow.ids.slice() : [press.id];
+        drag = { type: 'move', id: press.id, grab: press.grab, ids: ids };
+      }
       else if (press.kind === 'handle') drag = { type: 'link', from: press.id };
       if (drag) connectFrom = null;
     }
     if (drag && drag.type === 'move') {
       var c = nearestCell(p), n = store.node(drag.id), col = Math.max(0, c.col - drag.grab);
-      drag.target = { col: col, row: c.row }; drag.valid = store.fits(col, c.row, n.colspan || 1, drag.id);
+      drag.target = { col: col, row: c.row }; drag.dc = col - n.col; drag.dr = c.row - n.row;
+      drag.valid = movePreviewValid(drag.ids, drag.dc, drag.dr);
     } else if (drag && drag.type === 'link') {
       drag.at = p; drag.target = nodeAt(p);
+    } else if (drag && drag.type === 'marquee') {
+      drag.to = p;
     } else {
       var hn = nodeAt(p) || handleAt(p), hc = hn ? null : cellAt(p);
-      overlay.style.cursor = handleAt(p) ? 'crosshair' : hn ? 'grab' : hc ? 'copy' : edgeAt(p) >= 0 ? 'pointer' : 'default';
-      if (hn === hover.node && JSON.stringify(hc) === JSON.stringify(hover.cell)) return;
-      hover.node = hn; hover.cell = hc;
+      var hrm = hc ? null : marginRowAt(p), hcm = hc ? null : marginColAt(p);
+      overlay.style.cursor = handleAt(p) ? 'crosshair' : hn ? 'grab' : hc ? 'copy' : (hrm !== null || hcm !== null) ? 'pointer' : edgeAt(p) >= 0 ? 'pointer' : 'default';
+      if (hn === hover.node && JSON.stringify(hc) === JSON.stringify(hover.cell) && hrm === hover.rowMargin && hcm === hover.colMargin) return;
+      hover.node = hn; hover.cell = hc; hover.rowMargin = hrm; hover.colMargin = hcm;
     }
     drawMarks();
   }
@@ -233,19 +333,36 @@
     if (overlay.hasPointerCapture(ev.pointerId)) overlay.releasePointerCapture(ev.pointerId);
     var d = drag, pr = press; drag = null; press = null;
     if (d && d.type === 'move' && d.target) {
-      if (d.valid) store.ops.moveNode(d.id, d.target.col, d.target.row);
-      else announce('That cell is taken — node not moved');
-      cursor = d.valid ? { col: d.target.col, row: d.target.row } : cursor;
+      var moved;
+      if (d.ids.length > 1) moved = store.ops.moveNodes(d.ids, d.dc, d.dr);
+      else { moved = d.valid; if (moved) store.ops.moveNode(d.id, d.target.col, d.target.row); }
+      if (!moved) announce(d.ids.length > 1 ? 'That would take the set off the grid or onto another node — nothing moved' : 'That cell is taken — node not moved');
+      if (moved) setCursor(d.target.col, d.target.row);
     } else if (d && d.type === 'link') {
       if (d.target && d.target !== d.from) store.ops.addEdge(d.from, d.target);
+    } else if (d && d.type === 'marquee') {
+      var mr = marqueeRect(d.from, d.to), ids = Object.keys(L.nodes).filter(function (id) { return rectsOverlap(mr, L.nodes[id]); });
+      store.select(ids.length ? { type: 'nodes', ids: ids } : null);
+      announce(ids.length ? ids.length + ' node' + (ids.length === 1 ? '' : 's') + ' selected' : 'Selection cleared');
     } else if (pr && pr.kind === 'cell') {
-      cursor = { col: pr.cell.col, row: pr.cell.row };
+      setCursor(pr.cell.col, pr.cell.row);
       store.ops.addNode(pr.cell.col, pr.cell.row);
       if (Studio.inspector && Studio.inspector.focusField) Studio.inspector.focusField('label');
+    } else if (pr && pr.kind === 'gutter') {
+      store.select(pr.gi >= 0 ? { type: 'group', index: pr.gi } : null);
+    } else if (pr && pr.kind === 'handle' && pr.toggle) {
+      var cur = store.selectedNodeIds(), i = cur.indexOf(pr.id);
+      var next = i >= 0 ? cur.filter(function (x) { return x !== pr.id; }) : cur.concat([pr.id]);
+      store.select(next.length ? { type: 'nodes', ids: next } : null);
+    } else if (pr && pr.kind === 'margin') {
+      var mb = pr.mb, label = mb.axis === 'row' ? 'row' : 'column', n1 = mb.index + 1;
+      if (mb.axis === 'row') { if (mb.action === 'insert') store.ops.insertRow(mb.index); else store.ops.deleteRow(mb.index); }
+      else { if (mb.action === 'insert') store.ops.insertCol(mb.index); else store.ops.deleteCol(mb.index); }
+      announce((mb.action === 'insert' ? 'Inserted ' : 'Deleted ') + label + ' ' + n1);
     }
     if (L) drawMarks();
   }
-  function onLeave() { if (!drag) { hover.node = null; hover.cell = null; if (L) drawMarks(); } }
+  function onLeave() { if (!drag) { hover.node = null; hover.cell = null; hover.rowMargin = null; hover.colMargin = null; if (L) drawMarks(); } }
 
   // ---- keyboard ----
   function describeCursor() {
@@ -253,16 +370,80 @@
     return 'Row ' + (cursor.row + 1) + ', column ' + (cursor.col + 1) + ': ' + (n ? n.label + (n.sub ? ', ' + n.sub : '') : 'empty');
   }
   function announce(text) { status.textContent = text; }
+
+  // ---- clipboard & bulk actions (also exposed on Studio.canvas for other panels) ----
+  function selectAll() {
+    var ids = store.get().nodes.map(function (n) { return n.id; });
+    if (!ids.length) { announce('Nothing to select'); return; }
+    store.select(ids.length > 1 ? { type: 'nodes', ids: ids } : { type: 'node', id: ids[0] });
+    announce('Selected all ' + ids.length + ' node' + (ids.length === 1 ? '' : 's'));
+  }
+  function copySelection() {
+    var ids = store.selectedNodeIds();
+    if (!ids.length) return false;
+    var c = store.ops.copy(ids); if (!c) return false;
+    clip = c;
+    try { navigator.clipboard && navigator.clipboard.writeText(JSON.stringify(c)).catch(function () {}); } catch (e) { /* clipboard blocked on file:// */ }
+    announce('Copied ' + ids.length + ' node' + (ids.length === 1 ? '' : 's'));
+    return true;
+  }
+  function cutSelection() {
+    var ids = store.selectedNodeIds();
+    if (!ids.length || !copySelection()) return false;
+    store.ops.deleteNodes(ids);
+    announce('Cut ' + ids.length + ' node' + (ids.length === 1 ? '' : 's'));
+    return true;
+  }
+  function pasteClip(c) {
+    if (!c || c.diagramStudioClip !== 1) { announce('Nothing to paste'); return false; }
+    store.ops.paste(c, cursor.col, cursor.row);
+    announce('Pasted');
+    drawMarks();
+    return true;
+  }
+  function paste() { return pasteClip(clip); }
+  function duplicate() {
+    var ids = store.selectedNodeIds();
+    if (!ids.length) return false;
+    var c = store.ops.copy(ids); if (!c) return false;
+    clip = c;
+    var c0 = Math.min.apply(null, ids.map(function (id) { return store.node(id).col; }));
+    var rBottom = Math.max.apply(null, ids.map(function (id) { return store.node(id).row; }));
+    store.ops.paste(c, c0, rBottom + 1);
+    announce('Duplicated ' + ids.length + ' node' + (ids.length === 1 ? '' : 's'));
+    return true;
+  }
+
   function onKey(ev) {
-    if (!L || ev.metaKey || ev.ctrlKey || ev.altKey) return;
-    var sel = store.selection(), k = ev.key, dirs = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (!L) return;
+    var sel = store.selection(), k = ev.key, mod = ev.metaKey || ev.ctrlKey;
+    if (mod && !ev.altKey) {
+      if (k === 'a' || k === 'A') { ev.preventDefault(); selectAll(); return; }
+      if (k === 'c' || k === 'C') { ev.preventDefault(); copySelection(); return; }
+      if (k === 'x' || k === 'X') { ev.preventDefault(); cutSelection(); return; }
+      if (k === 'v' || k === 'V') { ev.preventDefault(); paste(); return; }
+      if (k === 'd' || k === 'D') { ev.preventDefault(); duplicate(); return; }
+    }
+    if (ev.altKey && ev.shiftKey && !mod) {
+      if (k === 'ArrowDown') { ev.preventDefault(); store.ops.insertRow(cursor.row); announce('Inserted row ' + (cursor.row + 1)); drawMarks(); return; }
+      if (k === 'ArrowRight') { ev.preventDefault(); store.ops.insertCol(cursor.col); announce('Inserted column ' + (cursor.col + 1)); drawMarks(); return; }
+      if (k === 'Backspace') { ev.preventDefault(); store.ops.deleteRow(cursor.row); announce('Deleted row ' + (cursor.row + 1)); drawMarks(); return; }
+      if (k === 'Delete') { ev.preventDefault(); store.ops.deleteCol(cursor.col); announce('Deleted column ' + (cursor.col + 1)); drawMarks(); return; }
+    }
+    if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    var dirs = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
     if (dirs[k]) {
       ev.preventDefault();
       var dc = dirs[k][0], dr = dirs[k][1];
+      if (ev.shiftKey && sel && sel.type === 'nodes') {
+        if (store.ops.moveNodes(sel.ids, dc, dr)) announce('Moved ' + sel.ids.length + ' nodes');
+        else announce('That would take the set off the grid or onto another node');
+        return;
+      }
       if (ev.shiftKey && sel && sel.type === 'node') {
         var n = store.node(sel.id), col = n.col + dc, row = n.row + dr;
         if (col < 0 || row < 0) return;
-        if (store.ops.moveNode(sel.id, col, row)) { cursor = { col: col, row: row }; announce('Moved ' + n.label + ' to row ' + (row + 1) + ', column ' + (col + 1)); }
+        if (store.ops.moveNode(sel.id, col, row)) { setCursor(col, row); announce('Moved ' + n.label + ' to row ' + (row + 1) + ', column ' + (col + 1)); }
         else announce('Row ' + (row + 1) + ', column ' + (col + 1) + ' is taken');
         return;
       }
@@ -270,6 +451,7 @@
       if (dc > 0 && cn) cursor.col = cn.col + (cn.colspan || 1); else if (dc < 0 && cn) cursor.col = cn.col - 1; else cursor.col += dc;
       cursor.row += dr;
       cursor.col = Math.max(0, Math.min(extCols() - 1, cursor.col)); cursor.row = Math.max(0, Math.min(extRows() - 1, cursor.row));
+      notifyCursor();
       announce(describeCursor() + (connectFrom ? ' — Enter connects' : ''));
       drawMarks(); return;
     }
@@ -298,6 +480,7 @@
     }
     if ((k === 'Delete' || k === 'Backspace') && sel) {
       ev.preventDefault();
+      if (sel.type === 'nodes') { store.ops.deleteNodes(sel.ids); announce('Deleted ' + sel.ids.length + ' nodes'); return; }
       if (sel.type === 'node') store.ops.deleteNode(sel.id);
       else if (sel.type === 'edge') store.ops.deleteEdge(sel.index);
       else if (sel.type === 'group') store.ops.deleteGroup(sel.index);
@@ -334,7 +517,24 @@
     overlay.addEventListener('keydown', onKey);
     overlay.addEventListener('focus', function () { focused = true; announce(describeCursor()); if (L) drawMarks(); });
     overlay.addEventListener('blur', function () { focused = false; if (L) drawMarks(); });
+    overlay.addEventListener('paste', function (ev) {                // a real OS-clipboard paste, when the browser allows reading it
+      var text = ev.clipboardData && ev.clipboardData.getData('text'), parsed = null;
+      if (text) { try { parsed = JSON.parse(text); } catch (e) { /* not a clip */ } }
+      if (parsed && parsed.diagramStudioClip === 1) { ev.preventDefault(); clip = parsed; pasteClip(parsed); }
+    });
     window.addEventListener('resize', function () { if (!L) return; if (!userZoomed) fitZoom(); drawMarks(); });
+  }
+
+  function reveal(sel) {
+    if (!L) return;
+    var b = selectionBounds(sel); if (!b) return;
+    var p1 = Studio.canvas.clientPoint(b.x, b.y), p2 = Studio.canvas.clientPoint(b.x + b.w, b.y + b.h);
+    var sr = scroller.getBoundingClientRect(), margin = 16;
+    var left = Math.min(p1.x, p2.x), right = Math.max(p1.x, p2.x), top = Math.min(p1.y, p2.y), bottom = Math.max(p1.y, p2.y);
+    var dx = 0, dy = 0;
+    if (left < sr.left + margin) dx = left - (sr.left + margin); else if (right > sr.right - margin) dx = right - (sr.right - margin);
+    if (top < sr.top + margin) dy = top - (sr.top + margin); else if (bottom > sr.bottom - margin) dy = bottom - (sr.bottom - margin);
+    if (dx || dy) scroller.scrollBy({ left: dx, top: dy, behavior: 'auto' });
   }
 
   Studio.canvas = {
@@ -344,6 +544,11 @@
     layout: function () { return L; },
     // clientPoint(x, y) — screen coordinates of a point in diagram units (for tests and scripted input)
     clientPoint: function (x, y) { var pt = overlay.createSVGPoint(); pt.x = x; pt.y = y; var q = pt.matrixTransform(overlay.getScreenCTM()); return { x: q.x, y: q.y }; },
-    cellCenter: function (col, row) { var r = cellRect(col, row); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; }
+    cellCenter: function (col, row) { var r = cellRect(col, row); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; },
+    // cursor()/onCursor(fn) — the keyboard cell cursor, and a subscription fired whenever it moves (keyboard or pointer)
+    cursor: function () { return { col: cursor.col, row: cursor.row }; },
+    onCursor: function (fn) { cursorSubs.push(fn); },
+    reveal: reveal,
+    copySelection: copySelection, cutSelection: cutSelection, paste: paste, duplicate: duplicate
   };
 })();

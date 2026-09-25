@@ -1,4 +1,4 @@
-/* main.js — wires store, canvas, inspector and io together; owns the toolbar, theme, lint panel and global keys. */
+/* main.js — wires store, canvas, inspector and io together; owns the toolbar, theme, documents, lint, step preview and global keys. */
 (function () {
   'use strict';
   var Studio = window.Studio;
@@ -45,14 +45,108 @@
     });
   }
 
+  // ---- lint: each problem is a button that selects and reveals its target ----
+  function targetOf(p) {
+    if (p.edge !== undefined) return { type: 'edge', index: p.edge };
+    if (p.edges && p.edges.length) return { type: 'edge', index: p.edges[0] };
+    if (p.nodes && p.nodes.length) return p.nodes.length === 1 ? { type: 'node', id: p.nodes[0] } : { type: 'nodes', ids: p.nodes.slice() };
+    if (p.zone !== undefined) return { type: 'group', index: p.zone };
+    return null;
+  }
   function renderLint() {
-    var issues = (Studio.canvas.layout() || {}).issues || [], box = $('lint');
+    var L = Studio.canvas.layout() || {}, issues = L.issues || [], problems = L.problems, box = $('lint');
     box.textContent = '';
     if (!issues.length) { var ok = document.createElement('p'); ok.className = 'lint-ok'; ok.textContent = 'Lint: no issues.'; box.appendChild(ok); return; }
     var ul = document.createElement('ul'); ul.className = 'lint-list';
-    issues.forEach(function (s) { var li = document.createElement('li'); li.textContent = 'Problem: ' + s; ul.appendChild(li); });
+    var list = (problems && problems.length) ? problems : issues.map(function (s) { return { text: s }; });
+    list.forEach(function (p) {
+      var li = document.createElement('li');
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'btn btn-quiet lint-item'; btn.textContent = 'Problem: ' + p.text;
+      btn.addEventListener('click', function () {
+        var sel = targetOf(p);
+        if (!sel) return;
+        Studio.store.select(sel);
+        if (Studio.canvas.reveal) Studio.canvas.reveal(sel);
+      });
+      li.appendChild(btn); ul.appendChild(li);
+    });
     box.appendChild(ul);
   }
+
+  // ---- documents: the toolbar's document switcher, New and Delete (with an inline confirm dialog) ----
+  var docDeleteEls;
+  function buildDocDeleteDialog() {
+    var dialog = document.createElement('dialog');
+    dialog.id = 'doc-delete-dialog'; dialog.className = 'import-dialog confirm-dialog';
+    var msg = document.createElement('p'); msg.id = 'doc-delete-msg';
+    dialog.appendChild(msg);
+    var actions = document.createElement('div'); actions.className = 'confirm-actions';
+    var cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'btn btn-secondary'; cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', function () { dialog.close(); });
+    var confirmBtn = document.createElement('button'); confirmBtn.type = 'button'; confirmBtn.className = 'btn btn-danger'; confirmBtn.textContent = 'Delete';
+    actions.appendChild(cancel); actions.appendChild(confirmBtn);
+    dialog.appendChild(actions);
+    document.body.appendChild(dialog);
+    return { dialog: dialog, msg: msg, confirmBtn: confirmBtn };
+  }
+  function renderDocList() {
+    var store = Studio.store, sel = $('doc-select'), current = store.docs.current();
+    sel.textContent = '';
+    store.docs.list().forEach(function (d) { sel.appendChild(new Option(d.title || 'Untitled diagram', d.id)); });
+    sel.value = current;
+  }
+  function initDocs() {
+    var store = Studio.store;
+    docDeleteEls = buildDocDeleteDialog();
+    renderDocList();
+    $('doc-select').addEventListener('change', function () { store.docs.open($('doc-select').value); });
+    $('doc-new').addEventListener('click', function () { store.docs.create(); Studio.toast('Created a new document'); });
+    $('doc-delete').addEventListener('click', function () {
+      docDeleteEls.msg.textContent = 'Delete "' + (store.get().title || 'Untitled diagram') + '"? This cannot be undone.';
+      docDeleteEls.dialog.showModal();
+      docDeleteEls.confirmBtn.focus();
+    });
+    docDeleteEls.confirmBtn.addEventListener('click', function () {
+      var id = store.docs.current();
+      docDeleteEls.dialog.close();
+      store.docs.remove(id);
+      Studio.toast('Deleted the document');
+    });
+  }
+
+  // ---- step preview: a toolbar "Steps" select, hiding later steps via a <style> tag in <head> so it survives
+  // the canvas re-rendering the figure's contents. ----
+  var stepFilter = null;                                             // null = "All"; else the chosen step number
+  function stepsUsed(s) {
+    var max = -1;
+    ['nodes', 'edges', 'groups'].forEach(function (k) {
+      (s[k] || []).forEach(function (o) { if (typeof o.step === 'number' && o.step > max) max = o.step; });
+    });
+    return max;
+  }
+  function stepStyleTag() {
+    var el = $('step-preview');
+    if (!el) { el = document.createElement('style'); el.id = 'step-preview'; document.head.appendChild(el); }
+    return el;
+  }
+  function applyStepFilter(max) {
+    var css = '';
+    if (stepFilter !== null && stepFilter < max) for (var i = stepFilter + 1; i <= max; i++) css += '#figure [data-step="' + i + '"]{opacity:.12}';
+    stepStyleTag().textContent = css;
+  }
+  function renderStepsControl() {
+    var max = stepsUsed(Studio.store.get()), group = $('steps-group'), sel = $('steps-select');
+    if (max < 0) { group.hidden = true; stepFilter = null; applyStepFilter(max); return; }
+    group.hidden = false;
+    if (stepFilter !== null && stepFilter > max) stepFilter = null;
+    sel.textContent = '';
+    sel.appendChild(new Option('All steps', ''));
+    for (var i = 0; i <= max; i++) sel.appendChild(new Option('Step ' + i, String(i)));
+    sel.value = stepFilter === null ? '' : String(stepFilter);
+    applyStepFilter(max);
+  }
+
   function syncToolbar() {
     var s = Studio.store.get();
     $('undo').disabled = !Studio.store.canUndo(); $('redo').disabled = !Studio.store.canRedo();
@@ -66,11 +160,17 @@
     Studio.canvas.init({ store: store, figure: $('figure'), overlay: $('overlay'), stage: $('stage'), wrap: $('stage-wrap'), scroller: $('canvas-scroll'), status: $('cursor-status') });
     Studio.inspector.init({ store: store, root: $('inspector') });
     Studio.io.init({ store: store });
+    initDocs();
+    if (Studio.text && Studio.text.mount) Studio.text.mount($('text-panel'));
+
+    var lastTitle;
     store.subscribe(function (reason) {
       if (reason === 'selection') Studio.canvas.redraw();
-      else { Studio.canvas.render(); renderLint(); }
+      else { Studio.canvas.render(); renderLint(); renderStepsControl(); }
       Studio.inspector.sync(reason);
       syncToolbar();
+      if (reason === 'load') { renderDocList(); lastTitle = store.get().title; }
+      else if (reason === 'spec' && store.get().title !== lastTitle) { lastTitle = store.get().title; renderDocList(); }
     });
     initTheme();
     $('undo').addEventListener('click', store.undo);
@@ -82,6 +182,16 @@
     $('zoom-in').addEventListener('click', Studio.canvas.zoomIn);
     $('zoom-out').addEventListener('click', Studio.canvas.zoomOut);
     $('zoom-fit').addEventListener('click', Studio.canvas.zoomFit);
+    $('steps-select').addEventListener('change', function () {
+      var v = $('steps-select').value;
+      stepFilter = v === '' ? null : parseInt(v, 10);
+      applyStepFilter(stepsUsed(store.get()));
+    });
+    $('toggle-text').addEventListener('click', function () {
+      var panel = $('text-panel');
+      panel.hidden = !panel.hidden;
+      $('toggle-text').setAttribute('aria-pressed', String(!panel.hidden));
+    });
     document.addEventListener('keydown', function (ev) {
       if (!(ev.metaKey || ev.ctrlKey) || isTyping(ev.target)) return;
       var k = ev.key.toLowerCase();
@@ -89,6 +199,16 @@
       else if ((k === 'z' && ev.shiftKey) || k === 'y') { ev.preventDefault(); store.redo(); }
     });
     store.init(STARTER);
+
+    if (location.hash) {
+      Studio.share.decode(location.hash).then(function (spec) {
+        if (!spec) return;
+        try { store.docs.create(spec); }
+        catch (e) { Studio.toast('That shared link is not usable: ' + (e.problems ? e.problems.join('; ') : e.message)); return; }
+        history.replaceState(null, '', location.pathname + location.search);
+        Studio.toast('Opened a shared diagram as a new document');
+      }, function (err) { Studio.toast(err.message); });
+    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();

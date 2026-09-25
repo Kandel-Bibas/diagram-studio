@@ -1,5 +1,6 @@
 /* studio.css — app chrome and shared components. Tokens come from vendor/tokens.css; no raw colours here. */
 *, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }                             /* component display rules must not un-hide */
 html, body { margin: 0; height: 100%; }
 body {
   background: var(--page); color: var(--ink-2);
@@ -91,6 +92,10 @@ button, input, select, textarea { font: inherit; color: inherit; font-weight: va
 .ov-target { fill: none; stroke: var(--ink); pointer-events: none; }
 .ov-handle { fill: var(--surface); stroke: var(--ink); cursor: crosshair; }
 .ov-handle:hover { fill: var(--accent); }
+.ov-marquee { fill: var(--fill); fill-opacity: 0.6; stroke: var(--ink); stroke-dasharray: 4 3; pointer-events: none; }
+.ov-margin-btn rect { fill: var(--surface); stroke: var(--line); }
+.ov-margin-btn path { fill: none; stroke: var(--ink-3); }
+.ov-margin-btn:hover rect, .ov-margin-btn:hover path { stroke: var(--ink); }
 
 /* ---- lint ---- */
 .lint { font-size: var(--text-small); }

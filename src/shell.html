@@ -14,6 +14,12 @@
 <body>
 <header class="bar">
   <h1 class="app-name">Diagram Studio</h1>
+  <div class="bar-group" role="group" aria-label="Document">
+    <label for="doc-select" class="visually-hidden">Document</label>
+    <select class="select" id="doc-select"></select>
+    <button type="button" class="btn btn-quiet btn-small" id="doc-new">New</button>
+    <button type="button" class="btn btn-quiet btn-small" id="doc-delete">Delete</button>
+  </div>
   <div class="bar-group" role="group" aria-label="History">
     <button type="button" class="btn btn-quiet" id="undo" title="Undo (⌘Z)">Undo</button>
     <button type="button" class="btn btn-quiet" id="redo" title="Redo (⇧⌘Z)">Redo</button>
@@ -25,19 +31,42 @@
     <button type="button" class="btn btn-quiet" id="zoom-in" aria-label="Zoom in">+</button>
     <button type="button" class="btn btn-quiet" id="zoom-fit">Fit</button>
   </div>
+  <div class="bar-group" role="group" aria-label="Step preview" id="steps-group" hidden>
+    <label for="steps-select" class="visually-hidden">Step preview</label>
+    <select class="select" id="steps-select"></select>
+  </div>
   <div class="bar-spacer"></div>
+  <div class="bar-group" role="group" aria-label="Panels">
+    <button type="button" class="btn btn-quiet" id="toggle-text" aria-pressed="false">Text</button>
+  </div>
   <div class="bar-group" role="group" aria-label="Import and export">
     <button type="button" class="btn btn-secondary" id="import">Import</button>
-    <button type="button" class="btn btn-secondary" id="copy-json">Copy spec JSON</button>
-    <button type="button" class="btn btn-secondary" id="copy-figure">Copy &lt;figure&gt;</button>
-    <button type="button" class="btn btn-primary" id="download-html">Download HTML</button>
+    <div class="menu">
+      <button type="button" class="btn btn-primary" id="export-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu">Export</button>
+      <div class="menu-list" id="export-menu" role="menu" aria-labelledby="export-btn" hidden>
+        <button type="button" class="menu-item" role="menuitem" id="export-share">Copy share link</button>
+        <button type="button" class="menu-item" role="menuitem" id="export-svg-light">Download SVG (light)</button>
+        <button type="button" class="menu-item" role="menuitem" id="export-svg-dark">Download SVG (dark)</button>
+        <button type="button" class="menu-item" role="menuitem" id="export-png-light">Download PNG (light)</button>
+        <button type="button" class="menu-item" role="menuitem" id="export-png-dark">Download PNG (dark)</button>
+        <button type="button" class="menu-item" role="menuitem" id="export-figure">Copy &lt;figure&gt;</button>
+        <button type="button" class="menu-item" role="menuitem" id="export-json">Copy spec JSON</button>
+        <button type="button" class="menu-item" role="menuitem" id="export-html">Download HTML</button>
+      </div>
+    </div>
   </div>
   <button type="button" class="btn btn-quiet" id="theme" aria-label="Theme: follows system">Theme: system</button>
 </header>
 
 <main class="layout">
   <section class="workspace" aria-label="Canvas">
-    <p class="hint" id="hint">Click an empty cell to add a node. Drag a node to move it; drag its round handle onto another node to connect. Arrow keys move the cell cursor, Enter adds or selects, C connects, Delete removes.</p>
+    <div class="hint" id="hint">
+      <p>Click an empty cell to add a node; drag to move; drag the round handle onto another node to connect; click an edge or a zone's margin to select it. Arrow keys move the cell cursor, Enter adds or selects, C connects, Delete removes.</p>
+      <details class="hint-details">
+        <summary>More shortcuts</summary>
+        <p>Marquee-drag empty space to select a range; Shift-click adds to the selection. ⌘C / ⌘X / ⌘V / ⌘D copy, cut, paste, duplicate; ⌘A selects all. Alt+Shift+↓ or → inserts a row or column at the cursor; Alt+Shift+Backspace or Delete removes the cursor's row or column.</p>
+      </details>
+    </div>
     <div class="canvas-scroll" id="canvas-scroll">
       <div class="stage-wrap" id="stage-wrap">
         <div class="stage" id="stage">
@@ -50,6 +79,7 @@
     <section class="lint" id="lint" aria-live="polite" aria-label="Lint"></section>
   </section>
   <aside class="inspector" id="inspector" aria-label="Inspector"></aside>
+  <section id="text-panel" class="text-panel" hidden aria-label="Text"></section>
 </main>
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
