@@ -1,0 +1,286 @@
+{
+ "scale": "doc",
+ "spec": {
+  "title": "Ticketing platform architecture",
+  "interactive": true,
+  "nodes": [
+   {
+    "id": "fans",
+    "label": "Fans",
+    "sub": "and bots",
+    "col": 0,
+    "row": 0,
+    "kind": "term"
+   },
+   {
+    "id": "cdn",
+    "label": "CDN \u00b7 WAF \u00b7 bot defence",
+    "sub": "static pages",
+    "col": 1,
+    "row": 0
+   },
+   {
+    "id": "wr",
+    "label": "Waiting room",
+    "sub": "random draw, then FIFO",
+    "col": 2,
+    "row": 0,
+    "kind": "key"
+   },
+   {
+    "id": "qs",
+    "label": "Queue state",
+    "sub": "durable \u00b7 ~200 MB",
+    "col": 3,
+    "row": 0,
+    "kind": "db"
+   },
+   {
+    "id": "idp",
+    "label": "Identity (IdP)",
+    "sub": "login before queue",
+    "col": 0,
+    "row": 1,
+    "kind": "ext"
+   },
+   {
+    "id": "gw",
+    "label": "API gateway",
+    "sub": "verifies token \u00b7 rate limits",
+    "col": 1,
+    "row": 1
+   },
+   {
+    "id": "ctl",
+    "label": "Admission controller",
+    "sub": "sets the rate every 2 s",
+    "col": 3,
+    "row": 1,
+    "kind": "key"
+   },
+   {
+    "id": "core",
+    "label": "Ticketing core",
+    "sub": "modular monolith \u00b7 web role",
+    "col": 1,
+    "row": 2,
+    "colspan": 2,
+    "children": [
+     {
+      "label": "Catalog"
+     },
+     {
+      "label": "Inventory & holds",
+      "kind": "key"
+     },
+     {
+      "label": "Orders"
+     },
+     {
+      "label": "Checkout"
+     }
+    ]
+   },
+   {
+    "id": "pg",
+    "label": "Postgres",
+    "sub": "seats \u00b7 holds \u00b7 orders",
+    "col": 3,
+    "row": 2,
+    "kind": "db"
+   },
+   {
+    "id": "redis",
+    "label": "Availability view",
+    "sub": "Redis \u00b7 \u22642 s stale",
+    "col": 3,
+    "row": 3,
+    "kind": "db"
+   },
+   {
+    "id": "worker",
+    "label": "Core \u00b7 worker role",
+    "sub": "pay \u00b7 fulfil \u00b7 reconcile",
+    "col": 1,
+    "row": 4
+   },
+   {
+    "id": "queue",
+    "label": "Durable queue",
+    "sub": "payments \u00b7 DLQ",
+    "col": 2,
+    "row": 4
+   },
+   {
+    "id": "relay",
+    "label": "Outbox relay",
+    "sub": "at-least-once",
+    "col": 3,
+    "row": 4
+   },
+   {
+    "id": "psp",
+    "label": "Payment provider",
+    "sub": "auth, then capture",
+    "col": 1,
+    "row": 5,
+    "kind": "ext"
+   },
+   {
+    "id": "mail",
+    "label": "Email \u00b7 wallet pass",
+    "sub": "off the critical path",
+    "col": 2,
+    "row": 5,
+    "kind": "muted"
+   },
+   {
+    "id": "obs",
+    "label": "Observability",
+    "sub": "oversold seats = 0",
+    "col": 3,
+    "row": 5
+   }
+  ],
+  "edges": [
+   {
+    "from": "fans",
+    "to": "cdn"
+   },
+   {
+    "from": "cdn",
+    "to": "wr",
+    "label": "join \u00b7 poll"
+   },
+   {
+    "from": "wr",
+    "to": "cdn",
+    "label": "admission token",
+    "hot": true
+   },
+   {
+    "from": "wr",
+    "to": "qs"
+   },
+   {
+    "from": "ctl",
+    "to": "wr",
+    "label": "release rate",
+    "hot": true
+   },
+   {
+    "from": "cdn",
+    "to": "gw",
+    "label": "token-bearing requests"
+   },
+   {
+    "from": "gw",
+    "to": "idp",
+    "label": "session"
+   },
+   {
+    "from": "gw",
+    "to": "core"
+   },
+   {
+    "from": "core",
+    "to": "pg",
+    "label": "atomic UPDATE"
+   },
+   {
+    "from": "core",
+    "to": "redis",
+    "label": "seat-map reads"
+   },
+   {
+    "from": "core",
+    "to": "ctl",
+    "label": "load signals",
+    "dash": true
+   },
+   {
+    "from": "pg",
+    "to": "relay",
+    "label": "transactional outbox",
+    "dash": true
+   },
+   {
+    "from": "relay",
+    "to": "redis",
+    "label": "seat deltas",
+    "dash": true
+   },
+   {
+    "from": "relay",
+    "to": "queue",
+    "dash": true
+   },
+   {
+    "from": "queue",
+    "to": "worker",
+    "dash": true
+   },
+   {
+    "from": "worker",
+    "to": "core",
+    "label": "same codebase",
+    "via": "left"
+   },
+   {
+    "from": "worker",
+    "to": "psp",
+    "label": "authorize"
+   },
+   {
+    "from": "psp",
+    "to": "worker",
+    "label": "webhooks",
+    "dash": true
+   },
+   {
+    "from": "worker",
+    "to": "mail",
+    "label": "tickets",
+    "dash": true
+   }
+  ],
+  "groups": [
+   {
+    "label": "Demand zone",
+    "caption": "2M sessions \u00b7 ~100k req/s",
+    "rows": [
+     0,
+     0
+    ],
+    "cols": [
+     0,
+     3
+    ]
+   },
+   {
+    "label": "Admitted zone",
+    "caption": "~12k shoppers \u00b7 ~3k req/s",
+    "rows": [
+     1,
+     3
+    ],
+    "cols": [
+     0,
+     3
+    ]
+   },
+   {
+    "label": "Async zone",
+    "caption": "Paced by the payment provider \u00b7 \u2264300 TPS",
+    "rows": [
+     4,
+     5
+    ],
+    "cols": [
+     0,
+     3
+    ]
+   }
+  ]
+ }
+}

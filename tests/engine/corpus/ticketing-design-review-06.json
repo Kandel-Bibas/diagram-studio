@@ -1,0 +1,41 @@
+{
+ "scale": "slide",
+ "spec": {
+  "title": "Funnel: fans through the waiting room to admissions",
+  "nodes": [
+   {
+    "id": "fans",
+    "label": "Fans",
+    "sub": "2,000,000",
+    "col": 0,
+    "row": 0
+   },
+   {
+    "id": "wr",
+    "label": "Waiting room",
+    "sub": "sets release rate",
+    "col": 1,
+    "row": 0,
+    "kind": "hot"
+   },
+   {
+    "id": "core",
+    "label": "Admitted",
+    "sub": "~50/s",
+    "col": 2,
+    "row": 0
+   }
+  ],
+  "edges": [
+   {
+    "from": "fans",
+    "to": "wr"
+   },
+   {
+    "from": "wr",
+    "to": "core",
+    "label": "admits"
+   }
+  ]
+ }
+}

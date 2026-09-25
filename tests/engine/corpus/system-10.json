@@ -1,0 +1,179 @@
+{
+ "scale": "doc",
+ "spec": {
+  "title": "Ten pieces of the backend in three bands: the request edge, admission control, and domain rules over shared state. Every write reaches the store.",
+  "interactive": true,
+  "nodes": [
+   {
+    "id": "gw",
+    "label": "Gateway",
+    "sub": "token and rate limit",
+    "col": 0,
+    "row": 0
+   },
+   {
+    "id": "srv",
+    "label": "Server and routes",
+    "sub": "HTTP in, JSON out",
+    "col": 1,
+    "row": 0
+   },
+   {
+    "id": "wr",
+    "label": "Waiting room",
+    "sub": "queue, draw, tokens",
+    "col": 2,
+    "row": 0
+   },
+   {
+    "id": "ctrl",
+    "label": "Admission controller",
+    "sub": "sets the release rate",
+    "col": 3,
+    "row": 0
+   },
+   {
+    "id": "inv",
+    "label": "Inventory",
+    "sub": "seats and holds",
+    "col": 1,
+    "row": 1
+   },
+   {
+    "id": "ord",
+    "label": "Orders and checkout",
+    "sub": "order and payment flow",
+    "col": 2,
+    "row": 1
+   },
+   {
+    "id": "psp",
+    "label": "Payment provider",
+    "sub": "mock, behind a breaker",
+    "col": 3,
+    "row": 1,
+    "kind": "ext"
+   },
+   {
+    "id": "store",
+    "label": "Store",
+    "sub": "every table, in memory",
+    "col": 1,
+    "row": 2,
+    "kind": "hot"
+   },
+   {
+    "id": "relay",
+    "label": "Outbox relay",
+    "sub": "store to queue and view",
+    "col": 2,
+    "row": 2
+   },
+   {
+    "id": "queue",
+    "label": "Queue and view",
+    "sub": "payments, seat list",
+    "col": 3,
+    "row": 2,
+    "kind": "store"
+   }
+  ],
+  "edges": [
+   {
+    "from": "srv",
+    "to": "gw",
+    "label": "verify token"
+   },
+   {
+    "from": "srv",
+    "to": "wr",
+    "label": "join, poll"
+   },
+   {
+    "from": "ctrl",
+    "to": "wr",
+    "label": "sets rate",
+    "dash": true
+   },
+   {
+    "from": "srv",
+    "to": "inv",
+    "label": "hold"
+   },
+   {
+    "from": "srv",
+    "to": "ord",
+    "label": "order"
+   },
+   {
+    "from": "inv",
+    "to": "store",
+    "label": "write"
+   },
+   {
+    "from": "ord",
+    "to": "store",
+    "label": "write"
+   },
+   {
+    "from": "ord",
+    "to": "psp",
+    "label": "authorise"
+   },
+   {
+    "from": "store",
+    "to": "relay",
+    "label": "outbox"
+   },
+   {
+    "from": "relay",
+    "to": "queue",
+    "label": "publish"
+   },
+   {
+    "from": "queue",
+    "to": "ord",
+    "label": "worker reads",
+    "dash": true
+   }
+  ],
+  "groups": [
+   {
+    "label": "Edge",
+    "caption": "Every request enters here.",
+    "rows": [
+     0,
+     0
+    ],
+    "cols": [
+     0,
+     1
+    ]
+   },
+   {
+    "label": "Admission",
+    "caption": "Decides who may shop, and how fast.",
+    "rows": [
+     0,
+     0
+    ],
+    "cols": [
+     2,
+     3
+    ]
+   },
+   {
+    "label": "Domain and state",
+    "caption": "Seats, orders, payment, and what they write.",
+    "rows": [
+     1,
+     2
+    ],
+    "cols": [
+     1,
+     3
+    ]
+   }
+  ]
+ }
+}

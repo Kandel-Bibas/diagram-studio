@@ -1,0 +1,10 @@
+# Every place engine/diagram.js is copied to. tools/sync-engine.py checks (default) or --push'es them.
+# A .js path gets the whole file; an .html path has its inlined engine replaced in place.
+~/.agents/design-system/diagram.js
+~/.claude/skills/html-output/diagram.js
+~/.claude/skills/slides/diagram.js
+~/.claude/skills/html-output/templates/brief.html
+~/.claude/skills/html-output/templates/map.html
+~/.claude/skills/html-output/templates/mixed.html
+~/.claude/skills/slides/deck-template.html
+~/personal/html-output-lab/slides/ticketing-design-review.html

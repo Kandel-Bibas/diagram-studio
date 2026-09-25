@@ -1,0 +1,81 @@
+{
+ "scale": "doc",
+ "spec": {
+  "title": "Architecture: waiting room admits at a chosen rate; Postgres is the sole arbiter; a controller closes the loop.",
+  "nodes": [
+   {
+    "id": "wr",
+    "label": "Waiting room",
+    "sub": "paces admission",
+    "col": 0,
+    "row": 0,
+    "kind": "hot"
+   },
+   {
+    "id": "core",
+    "label": "Ticketing core",
+    "sub": "orders, checkout",
+    "col": 1,
+    "row": 0
+   },
+   {
+    "id": "pg",
+    "label": "Postgres",
+    "sub": "the only arbiter",
+    "col": 2,
+    "row": 0
+   },
+   {
+    "id": "ctrl",
+    "label": "Controller",
+    "sub": "sets the rate",
+    "col": 0,
+    "row": 1
+   },
+   {
+    "id": "worker",
+    "label": "Worker",
+    "sub": "pay, fulfil",
+    "col": 1,
+    "row": 1
+   },
+   {
+    "id": "psp",
+    "label": "Payment provider",
+    "sub": "auth, capture",
+    "col": 2,
+    "row": 1,
+    "kind": "ext"
+   }
+  ],
+  "edges": [
+   {
+    "from": "wr",
+    "to": "core",
+    "label": "admits"
+   },
+   {
+    "from": "core",
+    "to": "pg",
+    "label": "UPDATE"
+   },
+   {
+    "from": "pg",
+    "to": "ctrl",
+    "dash": true,
+    "via": "left"
+   },
+   {
+    "from": "core",
+    "to": "worker",
+    "label": "async",
+    "dash": true
+   },
+   {
+    "from": "worker",
+    "to": "psp",
+    "label": "auth"
+   }
+  ]
+ }
+}

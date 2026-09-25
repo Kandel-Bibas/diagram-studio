@@ -1,0 +1,28 @@
+{
+ "scale": "slide",
+ "spec": {
+  "title": "Say layout: bullets feed the evidence",
+  "nodes": [
+   {
+    "id": "say",
+    "label": ".say",
+    "col": 0,
+    "row": 0
+   },
+   {
+    "id": "evidence",
+    "label": ".evidence",
+    "col": 1,
+    "row": 0,
+    "kind": "hot"
+   }
+  ],
+  "edges": [
+   {
+    "from": "say",
+    "to": "evidence",
+    "label": "feeds"
+   }
+  ]
+ }
+}

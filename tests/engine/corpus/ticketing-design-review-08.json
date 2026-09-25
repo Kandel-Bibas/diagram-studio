@@ -1,0 +1,53 @@
+{
+ "scale": "slide",
+ "spec": {
+  "title": "Payment states: held, in flight, sold, or unknown",
+  "nodes": [
+   {
+    "id": "held",
+    "label": "Held",
+    "col": 0,
+    "row": 0
+   },
+   {
+    "id": "inflight",
+    "label": "Payment in flight",
+    "col": 1,
+    "row": 0,
+    "kind": "hot"
+   },
+   {
+    "id": "sold",
+    "label": "Sold",
+    "col": 2,
+    "row": 0,
+    "kind": "term"
+   },
+   {
+    "id": "unknown",
+    "label": "Payment unknown",
+    "col": 1,
+    "row": 1,
+    "kind": "bad",
+    "step": 1
+   }
+  ],
+  "edges": [
+   {
+    "from": "held",
+    "to": "inflight"
+   },
+   {
+    "from": "inflight",
+    "to": "sold",
+    "label": "ok"
+   },
+   {
+    "from": "inflight",
+    "to": "unknown",
+    "label": "timeout",
+    "step": 1
+   }
+  ]
+ }
+}

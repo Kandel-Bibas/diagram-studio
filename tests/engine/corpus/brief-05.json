@@ -1,0 +1,70 @@
+{
+ "scale": "doc",
+ "spec": {
+  "title": "Seat lifecycle: available, held, payment in flight, sold, and payment unknown",
+  "nodes": [
+   {
+    "id": "avail",
+    "label": "available",
+    "col": 0,
+    "row": 0,
+    "kind": "term"
+   },
+   {
+    "id": "held",
+    "label": "held",
+    "col": 1,
+    "row": 0
+   },
+   {
+    "id": "pay",
+    "label": "payment in flight",
+    "col": 2,
+    "row": 0
+   },
+   {
+    "id": "sold",
+    "label": "sold",
+    "col": 3,
+    "row": 0,
+    "kind": "term"
+   },
+   {
+    "id": "unk",
+    "label": "payment unknown",
+    "col": 2,
+    "row": 1,
+    "kind": "bad"
+   }
+  ],
+  "edges": [
+   {
+    "from": "avail",
+    "to": "held",
+    "label": "hold"
+   },
+   {
+    "from": "held",
+    "to": "pay",
+    "label": "order"
+   },
+   {
+    "from": "pay",
+    "to": "sold",
+    "label": "capture"
+   },
+   {
+    "from": "pay",
+    "to": "unk",
+    "label": "timeout",
+    "dash": true
+   },
+   {
+    "from": "unk",
+    "to": "avail",
+    "label": "not charged",
+    "dash": true
+   }
+  ]
+ }
+}
