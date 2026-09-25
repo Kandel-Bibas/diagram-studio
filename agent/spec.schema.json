@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://diagram-studio.bibas.dev/spec.schema.json",
+  "title": "Diagram Studio spec",
+  "description": "A declarative grid diagram: nodes sit in grid cells (so they never overlap), edges run only through the gutters between rows and columns (so they never cross a node). Rendered and lint-checked by diagram.js — see https://diagram-studio.bibas.dev/diagram.js and /agents.md for the full guide. additionalProperties is true everywhere: the engine ignores fields it does not know, so an unrecognized field is silently dropped rather than rejected — but only the fields documented here do anything.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["nodes"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Diagram title. Used as the SVG's accessible name (aria-label/<title>) and, by dgs render --format html, the page <title>. Not drawn on the canvas itself."
+    },
+    "scale": {
+      "type": "string",
+      "enum": ["doc", "slide"],
+      "default": "doc",
+      "description": "\"doc\" for an inline document figure (≤ ~1072px wide, ≤4 columns recommended). \"slide\" for a 1920x1080 deck slide (bigger type, wider canvas). This is also where a share link (#s=/#j=) and dgs's wrapper input ({\"scale\":...,\"spec\":...}) carry the scale — as this same field, inside the spec."
+    },
+    "flow": {
+      "type": "string",
+      "enum": ["down", "right"],
+      "default": "down",
+      "description": "Direction auto-placement lays out nodes that have no col/row: layers stack downward (rows grow) by default, or rightward (columns grow) with \"right\". Only affects nodes missing col/row; nodes with both are never moved."
+    },
+    "interactive": {
+      "type": "boolean",
+      "description": "When true, every node is focusable and clickable; clicking (or Enter/Space when focused) fires a \"diagram:select\" CustomEvent on the figure with detail = the node object."
+    },
+    "nodes": {
+      "type": "array",
+      "description": "The boxes. Order does not affect layout but does affect auto-placement tie-breaks and z-order.",
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "edges": {
+      "type": "array",
+      "description": "Arrows between nodes, always routed through row/column gutters.",
+      "items": { "$ref": "#/$defs/edge" }
+    },
+    "groups": {
+      "type": "array",
+      "description": "Zones: a dashed rectangle with a two-line header (label + caption) drawn behind a rectangular block of cells, or behind a named set of nodes.",
+      "items": { "$ref": "#/$defs/group" }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "label"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique within the spec. Referenced by edges' from/to and groups' nodes."
+        },
+        "label": {
+          "type": "string",
+          "description": "Node title. Wraps to two lines, then shrinks to fit, then the render lint flags it — keep it to roughly 24 characters or less so it never has to."
+        },
+        "sub": {
+          "type": "string",
+          "description": "A smaller caption line under the label (e.g. a tech detail or metric). Keep it to roughly 28 characters or less."
+        },
+        "col": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-based grid column. Omit BOTH col and row to have the node auto-placed; giving only one is invalid — either give both, for a precise layout, or neither."
+        },
+        "row": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-based grid row. See \"col\"."
+        },
+        "colspan": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "How many columns wide the node spans, starting at col."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["default", "hot", "key", "db", "store", "ext", "term", "bad", "muted"],
+          "description": "Visual role. \"hot\" is the accent fill and marks the ONE thing the diagram is about — use at most one per diagram, everywhere else on the highlighted path use \"key\" (an ink outline). \"db\" draws a cylinder. \"store\"/\"term\" draw a pill (term is muted). \"ext\" is dashed, for systems outside the one being diagrammed. \"bad\" and \"muted\" are self-explanatory."
+        },
+        "icon": {
+          "type": "string",
+          "enum": ["user", "server", "db", "cloud", "globe", "lock", "shield", "queue", "bolt", "phone", "browser", "file", "gear", "mail", "cpu", "clock", "search", "chart", "bell", "bot", "box", "code", "terminal"],
+          "description": "One glyph drawn before the label. Also printable with `dgs icons`."
+        },
+        "children": {
+          "type": "array",
+          "description": "Turns the node into a container: the title moves to the top-left and these render as a row of child boxes inside it. A container is taller than a plain node.",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["label"],
+            "properties": {
+              "label": { "type": "string", "description": "Child box text; wraps and shrinks like a node label." },
+              "kind": { "type": "string", "description": "Only \"hot\" and \"key\" are styled on a child box; other values are accepted but drawn plain." }
+            }
+          }
+        },
+        "step": {
+          "description": "Build-step marker for a slide deck: adds class \"step\" and data-step=<value>, so a slide framework can reveal it incrementally. Any scalar value.",
+          "type": ["integer", "string"]
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "type": "string", "description": "Source node id." },
+        "to": { "type": "string", "description": "Target node id." },
+        "label": {
+          "type": "string",
+          "description": "Text on the edge. Keep it to 1-3 words — it sizes the column gap between horizontally adjacent nodes and wraps to at most two lines."
+        },
+        "dash": { "type": "boolean", "description": "Dashed stroke." },
+        "hot": {
+          "type": "boolean",
+          "description": "Heavier stroke, in the accent/ink highlight colour — marks the ONE path the diagram is about, alongside \"key\" nodes."
+        },
+        "via": {
+          "type": "string",
+          "enum": ["top", "bottom", "left", "right"],
+          "description": "Which gutter a long edge (same column, far rows; or same row, far columns) should route through, when the default choice crosses something."
+        },
+        "both": { "type": "boolean", "description": "Draw an arrowhead at both ends." },
+        "exit": {
+          "type": "string",
+          "enum": ["top", "bottom", "left", "right"],
+          "description": "Force which side of the FROM node the edge leaves from."
+        },
+        "enter": {
+          "type": "string",
+          "enum": ["top", "bottom", "left", "right"],
+          "description": "Force which side of the TO node the edge arrives at."
+        },
+        "step": {
+          "description": "Build-step marker, like a node's \"step\".",
+          "type": ["integer", "string"]
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Either give \"nodes\" (the zone wraps exactly those nodes' cells — simplest, and safe if the layout changes), or give both \"rows\" and \"cols\" (a fixed rectangular block of cells; every other node whose cell falls inside it is flagged by the render lint, so either add it to the zone or move it out).",
+      "properties": {
+        "label": { "type": "string", "description": "Zone title, shown top-left of the zone." },
+        "caption": { "type": "string", "description": "One-sentence caption under the label." },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Node ids the zone wraps. Mutually exclusive with rows/cols."
+        },
+        "rows": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "[firstRow, lastRow], inclusive, firstRow ≤ lastRow. Requires \"cols\" too."
+        },
+        "cols": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "[firstCol, lastCol], inclusive, firstCol ≤ lastCol. Requires \"rows\" too."
+        },
+        "step": {
+          "description": "Build-step marker, like a node's \"step\".",
+          "type": ["integer", "string"]
+        }
+      }
+    }
+  }
+}

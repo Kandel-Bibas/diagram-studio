@@ -1,0 +1,16 @@
+{
+  "title": "Client / backend split",
+  "nodes": [
+    { "id": "client", "label": "Client", "kind": "term", "icon": "browser", "col": 0, "row": 0 },
+    { "id": "api", "label": "API", "kind": "hot", "col": 1, "row": 0 },
+    { "id": "db", "label": "Database", "kind": "db", "col": 2, "row": 0 }
+  ],
+  "edges": [
+    { "from": "client", "to": "api", "label": "HTTPS" },
+    { "from": "api", "to": "db", "label": "SQL" }
+  ],
+  "groups": [
+    { "label": "Client", "caption": "browser or mobile app", "nodes": ["client"] },
+    { "label": "Backend", "caption": "stateless, horizontally scaled", "nodes": ["api", "db"] }
+  ]
+}

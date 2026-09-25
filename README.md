@@ -4,7 +4,7 @@
 
 ![Diagram Studio editing a 16-node architecture diagram](docs/screenshots/studio-light.png)
 
-A visual editor for [`diagram.js`](vendor/diagram.js) grid diagrams. It is one offline HTML file: open
+A visual editor for [`diagram.js`](engine/diagram.js) grid diagrams. It is one offline HTML file: open
 `diagram-studio.html` in a browser and build a diagram on the grid instead of writing JSON.
 
 It is not a freeform whiteboard. Nodes sit in grid cells and edges run through the gutters, which is what
@@ -43,15 +43,36 @@ Launch video (21 s): [landing/media/brag.mp4](landing/media/brag.mp4), made with
 ## Develop
 
 ```sh
-python3 build.py            # src/ + vendor/ → diagram-studio.html
-python3 build.py --site     # also site/: landing at /, studio at /app, the single file, media
+python3 build.py            # engine/ + src/ + vendor/tokens.css → diagram-studio.html
+python3 build.py --site     # also site/: landing at /, studio at /app, agent docs, the dgs CLI, media
 cd site && vercel deploy --prod   # deploy (site/.vercel links the Vercel project)
-python3 build.py --sync     # refresh vendor/ from ~/.agents/design-system first
-tests/run.sh                # e2e in headless Chrome: rebuilds the ticketing fixture by mouse, round-trips it
+python3 build.py --sync     # refresh vendor/tokens.css from ~/.agents/design-system first
+tests/run.sh                # studio e2e in headless Chrome (canvas, panels, store, text, share links)
+tests/engine/snapshot.py --check   # engine regression: every figure in tests/engine/corpus renders unchanged
+python3 -m unittest tests/test_dgs.py   # the dgs CLI
+tools/sync-engine.py [--push]      # check / update every copy of the engine listed in engine/copies.txt
 ```
 
-`src/store.js` holds state, undo and autosave. `src/canvas.js` renders through the engine and handles the
-pointer and keyboard. `src/inspector.js` and `src/io.js` handle the side panel and import/export.
+`engine/diagram.js` is the engine's home; this repo pushes it to the copies that inline it. `src/store.js` holds
+state, undo, the document library and autosave. `src/canvas.js` renders through the engine and handles the
+pointer and keyboard. `src/inspector.js` and `src/io.js` handle the side panel and import/export; `src/text.js`
+the text pane and Mermaid import; `src/share.js` share links.
+
+## Agents
+
+A coding agent (Claude Code, Codex, Cursor, or a claude.ai chat that can only fetch URLs)
+can build and export diagrams without touching this repo: read
+[diagram-studio.bibas.dev/agents.md](https://diagram-studio.bibas.dev/agents.md) (mirrored
+at [`agent/agents.md`](agent/agents.md)), then either share-link a spec or use the `dgs` CLI:
+
+```sh
+curl -fsSL https://diagram-studio.bibas.dev/llms.txt         # entry point (llmstxt.org format)
+curl -fsSL https://diagram-studio.bibas.dev/dgs -o dgs && chmod +x dgs
+./dgs lint spec.json && ./dgs render spec.json -o diagram.svg
+```
+
+`dgs` is one self-contained Python ≥3.9 file (stdlib only); `agent/spec.schema.json` has the
+full field reference.
 
 ## Credits
 

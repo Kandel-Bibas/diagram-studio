@@ -1,0 +1,15 @@
+{
+  "title": "Ingest pipeline",
+  "flow": "right",
+  "nodes": [
+    { "id": "src", "label": "Source events", "kind": "ext" },
+    { "id": "ingest", "label": "Ingest", "sub": "Kafka topic" },
+    { "id": "transform", "label": "Transform", "kind": "hot", "icon": "gear" },
+    { "id": "store", "label": "Warehouse", "sub": "queried by dashboards", "kind": "db" }
+  ],
+  "edges": [
+    { "from": "src", "to": "ingest" },
+    { "from": "ingest", "to": "transform" },
+    { "from": "transform", "to": "store", "label": "batches" }
+  ]
+}

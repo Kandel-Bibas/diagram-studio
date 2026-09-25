@@ -1,0 +1,31 @@
+# Diagram Studio
+
+> Grid diagrams that cannot overlap: nodes sit in cells, edges route only through the
+> gutters between rows and columns. Built for coding agents: a share link, a one-file
+> Python CLI, and an embeddable engine — no account, no install required for the link.
+
+## Start here
+
+- [Agent guide](https://diagram-studio.bibas.dev/agents.md): full spec reference, delivery
+  paths (share link / CLI / embed) with exact code, worked examples, and the lint-to-fix table.
+- [JSON Schema](https://diagram-studio.bibas.dev/spec.schema.json): every spec field, JSON
+  Schema draft 2020-12.
+
+## Tools
+
+- [dgs](https://diagram-studio.bibas.dev/dgs): self-contained Python 3 (stdlib only) CLI —
+  `lint`, `render` (svg/png/html/figure), `link`, `place`, `schema`, `icons`, `example`.
+- [diagram.js](https://diagram-studio.bibas.dev/diagram.js): the rendering engine. Dependency-free;
+  inline it verbatim in any page.
+- [Claude Code / Codex skill](https://diagram-studio.bibas.dev/skill/SKILL.md)
+
+## Examples
+
+- [webapp.json](https://diagram-studio.bibas.dev/examples/webapp.json): a 6-node request path.
+- [pipeline.json](https://diagram-studio.bibas.dev/examples/pipeline.json): `flow: right`.
+- [zone.json](https://diagram-studio.bibas.dev/examples/zone.json): two zones.
+- [auth-flow.json](https://diagram-studio.bibas.dev/examples/auth-flow.json): a highlighted path, slide scale.
+
+## Optional
+
+- [Studio](https://diagram-studio.bibas.dev/app): the visual (human, mouse-driven) editor.

@@ -109,6 +109,16 @@ section:first-of-type, .hero { border-top: none; }
 .steps h3 { font-size: var(--text-body); margin-bottom: var(--s-1); }
 .steps p { margin: 0; font-size: var(--text-small); color: var(--ink-2); }
 
+/* ---- agents ---- */
+.agents-section h2 { font-size: var(--text-heading-sm); line-height: var(--leading-heading-sm); margin-bottom: var(--s-4); }
+.agents-section p { margin: 0 0 var(--s-4); max-width: 60ch; }
+.agents-code {
+  background: var(--inverse); color: var(--on-inverse); border-radius: var(--r-wash);
+  padding: var(--s-4); font: var(--text-small)/1.6 var(--mono); overflow-x: auto; margin: 0 0 var(--s-4);
+}
+.agents-section .note { font-size: var(--text-small); color: var(--ink-3); margin: 0; }
+.agents-section .note a { color: inherit; }
+
 /* ---- footer ---- */
 footer { border-top: 1px solid var(--line); padding: var(--s-5) 0 var(--s-7); }
 footer .container { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
@@ -227,6 +237,13 @@ footer p { margin: 0; font-size: var(--text-small); color: var(--ink-3); }
         <div><h3>Export</h3><p>Copy the figure, download the HTML, or copy the JSON.</p></div>
       </li>
     </ol>
+  </section>
+  <section class="agents-section container" aria-labelledby="agents-heading">
+    <h2 id="agents-heading">For agents</h2>
+    <p>Point a coding agent at this site and it can build, lint, and export diagrams on its own — no account, no install.</p>
+    <pre class="agents-code"><code>curl -fsSL https://diagram-studio.bibas.dev/llms.txt
+curl -fsSL https://diagram-studio.bibas.dev/dgs -o dgs &amp;&amp; chmod +x dgs</code></pre>
+    <p class="note"><a href="/agents.md">Full agent guide (agents.md) →</a></p>
   </section>
 </main>
 

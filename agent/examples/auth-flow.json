@@ -1,0 +1,15 @@
+{
+  "title": "Login: the token-refresh path is highlighted",
+  "scale": "slide",
+  "nodes": [
+    { "id": "app", "label": "Mobile app", "kind": "term", "icon": "phone", "col": 0, "row": 0 },
+    { "id": "gw", "label": "API gateway", "kind": "key", "col": 1, "row": 0 },
+    { "id": "auth", "label": "Auth service", "sub": "issues + refreshes tokens", "kind": "hot", "col": 2, "row": 0 },
+    { "id": "users", "label": "Users", "kind": "db", "col": 2, "row": 1 }
+  ],
+  "edges": [
+    { "from": "app", "to": "gw", "label": "expired token", "hot": true },
+    { "from": "gw", "to": "auth", "label": "refresh", "hot": true },
+    { "from": "auth", "to": "users", "label": "verify" }
+  ]
+}

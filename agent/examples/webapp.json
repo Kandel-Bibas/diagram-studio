@@ -1,0 +1,18 @@
+{
+  "title": "Web app request path",
+  "nodes": [
+    { "id": "user", "label": "User", "kind": "term", "icon": "user" },
+    { "id": "cdn", "label": "CDN", "sub": "static assets", "icon": "cloud" },
+    { "id": "api", "label": "API server", "kind": "hot", "icon": "server" },
+    { "id": "cache", "label": "Cache", "sub": "sessions", "kind": "store" },
+    { "id": "queue", "label": "Job queue", "icon": "queue" },
+    { "id": "db", "label": "Postgres", "sub": "orders · users", "kind": "db" }
+  ],
+  "edges": [
+    { "from": "user", "to": "cdn" },
+    { "from": "cdn", "to": "api", "label": "API calls" },
+    { "from": "api", "to": "cache", "label": "session" },
+    { "from": "api", "to": "queue", "label": "jobs" },
+    { "from": "api", "to": "db", "label": "reads · writes" }
+  ]
+}
