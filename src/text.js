@@ -374,11 +374,12 @@
     var spec = { nodes: [] };
     var errors = [], warnings = [];
     var nodesById = {}, idMap = {}, usedIds = {};
-    var sgStack = [];
+    var sgStack = [], sgById = {}, closedSubgraphs = [], pendingEdges = [];
     var warnedKinds = {};
     var sawAny = false;
 
     function w(line, text) { return err(line, text); }
+    function warnOnce(kind, line, text) { if (!warnedKinds[kind]) { warnedKinds[kind] = true; warnings.push(w(line, text)); } }
 
     function sanitize(raw) {
       if (idMap[raw]) return idMap[raw];
@@ -392,39 +393,61 @@
     function decodeLabel(s) { return /^".*"$/.test(s) ? s.slice(1, -1) : s; }
 
     function currentSubgraph() { return sgStack[sgStack.length - 1]; }
+    function parseSubgraphHeader(rest) {             // "id [label]", "id[label]", "\"label\"", "word", or "free text"
+      var tm = /^(\S+?)\s*\[(.*)\]$/.exec(rest);
+      if (tm) return { id: tm[1], label: decodeLabel(tm[2]) };
+      if (/^".*"$/.test(rest)) return { id: null, label: rest.slice(1, -1) };
+      return { id: /^\S+$/.test(rest) ? rest : null, label: rest };
+    }
+    function subgraphNodes(sg) {                       // its own nodes, then its nested subgraphs' nodes
+      var ids = sg.members.slice();
+      sg.children.forEach(function (c) { subgraphNodes(c).forEach(function (id) { if (ids.indexOf(id) < 0) ids.push(id); }); });
+      return ids;
+    }
+    // Edges may name a subgraph (Mermaid draws them to its box). Zones cannot be edge endpoints here, so such an
+    // edge attaches to the subgraph's first node. Subgraph ids are collected up front: an edge may precede its subgraph.
+    var subgraphIds = {};
+    lines.forEach(function (raw) {
+      var m = /^subgraph\s+(.*)$/i.exec(raw.replace(/;+\s*$/, '').trim());
+      if (m) { var id = parseSubgraphHeader(m[1]).id; if (id) subgraphIds[id] = true; }
+    });
 
+    // Each shape matches either a quoted label (which may hold any bracket) or an unquoted one free of its own brackets.
     var SHAPES = [
-      { re: /^\(\(([^()]*)\)\)/, kind: 'store' },
-      { re: /^\(\[([^\[\]]*)\]\)/, kind: 'term' },
-      { re: /^\[\(([^()]*)\)\]/, kind: 'db' },
-      { re: /^\[([^\[\]]*)\]/, kind: null },
-      { re: /^\(([^()]*)\)/, kind: null },
-      { re: /^\{([^{}]*)\}/, kind: null, warnDiamond: true },
-      { re: /^>([^\]]*)\]/, kind: null }
+      { re: /^\(\((?:"([^"]*)"|([^()]*))\)\)/, kind: 'store' },
+      { re: /^\(\[(?:"([^"]*)"|([^\[\]]*))\]\)/, kind: 'term' },
+      { re: /^\[\((?:"([^"]*)"|([^()]*))\)\]/, kind: 'db' },
+      { re: /^\{\{(?:"([^"]*)"|([^{}]*))\}\}/, kind: null, warnBox: 'hexagon shape rendered as a box' },
+      { re: /^\[(?:"([^"]*)"|([^\[\]]*))\]/, kind: null },
+      { re: /^\((?:"([^"]*)"|([^()]*))\)/, kind: null },
+      { re: /^\{(?:"([^"]*)"|([^{}]*))\}/, kind: null, warnBox: 'decision shape rendered as a box' },
+      { re: /^>(?:"([^"]*)"|([^\]]*))\]/, kind: null }
     ];
-    function readNodeToken(s) {
-      var m = /^([A-Za-z0-9_.:-]+)/.exec(s);
+    function readNodeToken(s, lineNo) {
+      var m = /^([A-Za-z0-9_.:-]+?)(?=:::|[^A-Za-z0-9_.:-]|$)/.exec(s);
       if (!m) return null;
-      var id = m[1], rest = s.slice(id.length), consumed = id.length, label = null, kind = null, warnDiamond = false;
+      var id = m[1], rest = s.slice(id.length), consumed = id.length, label = null, kind = null, warnBox = null;
       for (var i = 0; i < SHAPES.length; i++) {
         var sm = SHAPES[i].re.exec(rest);
-        if (sm) { label = sm[1]; kind = SHAPES[i].kind; warnDiamond = !!SHAPES[i].warnDiamond; consumed += sm[0].length; break; }
+        if (sm) { label = sm[1] !== undefined ? sm[1] : sm[2]; kind = SHAPES[i].kind; warnBox = SHAPES[i].warnBox || null; consumed += sm[0].length; break; }
       }
-      return { id: id, label: label, kind: kind, warnDiamond: warnDiamond, length: consumed };
+      var cm = /^:::[A-Za-z0-9_-]+/.exec(s.slice(consumed));
+      if (cm) { consumed += cm[0].length; warnOnce(':::', lineNo, '":::" class styling is not supported and was ignored'); }
+      return { id: id, label: label, kind: kind, warnBox: warnBox, length: consumed };
     }
 
     function registerNode(tok, lineNo) {
       var id = sanitize(tok.id);
       var existing = nodesById[id];
       if (!existing) {
-        var n = { id: id, label: tok.label !== null ? decodeLabel(tok.label) : tok.id };
+        var n = { id: id, label: tok.label !== null ? tok.label : tok.id };
         if (tok.kind) n.kind = tok.kind;
         spec.nodes.push(n); nodesById[id] = n;
       } else if (tok.label !== null && existing.label === existing.id) {
-        existing.label = decodeLabel(tok.label);
+        existing.label = tok.label;
         if (tok.kind) existing.kind = tok.kind;
       }
-      if (tok.warnDiamond) warnings.push(w(lineNo, 'decision shape rendered as a box'));
+      if (tok.warnBox) warnings.push(w(lineNo, tok.warnBox));
       var sg = currentSubgraph();
       if (sg && sg.members.indexOf(id) < 0) sg.members.push(id);
       return id;
@@ -453,10 +476,10 @@
         var ids = [];
         while (true) {
           ws();
-          var tok = readNodeToken(line.slice(pos));
+          var tok = readNodeToken(line.slice(pos), lineNo);
           if (!tok) return ids.length ? ids : null;
           pos += tok.length;
-          ids.push(registerNode(tok, lineNo));
+          ids.push(tok.label === null && subgraphIds[tok.id] ? { subgraph: tok.id } : registerNode(tok, lineNo));
           ws();
           if (line.charAt(pos) === '&') { pos++; continue; }
           break;
@@ -488,8 +511,7 @@
             if (arrows[i].hot) e.hot = true;
             if (arrows[i].both) e.both = true;
             if (arrows[i].label !== undefined && arrows[i].label !== '') e.label = decodeLabel(arrows[i].label);
-            if (!spec.edges) spec.edges = [];
-            spec.edges.push(e);
+            pendingEdges.push({ edge: e, line: lineNo });
           });
         });
       }
@@ -512,19 +534,23 @@
       }
       var sgm = /^subgraph\s+(.*)$/i.exec(trimmed);
       if (sgm) {
-        if (sgStack.length) warnings.push(w(lineNo, 'nested subgraphs are not supported; flattened'));
-        var rest = sgm[1], label;
-        var tm = /^\S+\s*\[(.*)\]$/.exec(rest);
-        if (tm) label = tm[1];
-        else if (/^".*"$/.test(rest)) label = rest.slice(1, -1);
-        else label = rest;
-        sgStack.push({ label: label, members: [] });
+        var head = parseSubgraphHeader(sgm[1]);
+        var opened = { id: head.id, label: head.label, members: [], children: [] };
+        if (sgStack.length) {
+          warnings.push(w(lineNo, 'nested subgraphs are not supported; flattened'));
+          currentSubgraph().children.push(opened);
+        }
+        if (head.id) sgById[head.id] = opened;
+        sgStack.push(opened);
         sawAny = true; return;
       }
       if (/^end$/i.test(trimmed)) {
         if (!sgStack.length) { warnings.push(w(lineNo, '"end" with no matching "subgraph" was ignored')); return; }
-        var sg = sgStack.pop();
-        if (sg.members.length) { if (!spec.groups) spec.groups = []; spec.groups.push({ label: sg.label, nodes: sg.members.slice() }); }
+        closedSubgraphs.push(sgStack.pop());
+        return;
+      }
+      if (/^direction\s+(TB|TD|BT|RL|LR)$/i.test(trimmed)) {
+        warnOnce('direction', lineNo, '"direction" statements are not supported; the whole diagram follows the graph\'s direction');
         return;
       }
       var dm2 = /^(classDef|class|style|linkStyle|click)\b/i.exec(trimmed);
@@ -539,7 +565,26 @@
 
     sgStack.forEach(function (sg) {
       warnings.push(w(0, 'subgraph "' + sg.label + '" was never closed with "end"'));
+      closedSubgraphs.push(sg);
+    });
+    closedSubgraphs.forEach(function (sg) {
       if (sg.members.length) { if (!spec.groups) spec.groups = []; spec.groups.push({ label: sg.label, nodes: sg.members.slice() }); }
+    });
+
+    function endpoint(ref, lineNo) {
+      if (typeof ref === 'string') return ref;
+      var ids = sgById[ref.subgraph] ? subgraphNodes(sgById[ref.subgraph]) : [];
+      if (!ids.length) { warnings.push(w(lineNo, 'subgraph "' + ref.subgraph + '" has no nodes; an edge to it was ignored')); return null; }
+      warnings.push(w(lineNo, 'edges cannot attach to a subgraph; the edge at "' + ref.subgraph + '" attaches to its first node "' + ids[0] + '"'));
+      return ids[0];
+    }
+    pendingEdges.forEach(function (p) {
+      var from = endpoint(p.edge.from, p.line), to = endpoint(p.edge.to, p.line);
+      if (from === null || to === null) return;
+      if (from === to) { warnings.push(w(p.line, 'edge "' + from + '" to itself (via a subgraph) was ignored')); return; }
+      p.edge.from = from; p.edge.to = to;
+      if (!spec.edges) spec.edges = [];
+      spec.edges.push(p.edge);
     });
 
     if (!sawAny || !spec.nodes.length) return { spec: null, errors: [err(0, 'no recognizable Mermaid flowchart content found')], warnings: warnings };

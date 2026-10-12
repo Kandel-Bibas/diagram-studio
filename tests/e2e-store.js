@@ -58,6 +58,29 @@
     var bad = 0; try { S.ops.autoArrange('up'); } catch (e) { bad = 1; }
     check('autoArrange rejects an unknown flow', bad === 1);
   });
+  E2E.suite('engine: auto placement keeps each zone a block of its own', function () {
+    // Cross edges a→d and b→c used to pull c under b and d under a, so each zone's box covered the other zone's nodes.
+    ['down', 'right'].forEach(function (flow) {
+      var spec = { flow: flow, nodes: ['x', 'a', 'b', 'c', 'd'].map(function (id) { return { id: id, label: id }; }),
+        edges: [{ from: 'x', to: 'a' }, { from: 'x', to: 'b' }, { from: 'a', to: 'd' }, { from: 'b', to: 'c' }],
+        groups: [{ label: 'A', nodes: ['a', 'c'] }, { label: 'B', nodes: ['b', 'd'] }] };
+      var placed = Diagram.place(spec), at = {};
+      placed.nodes.forEach(function (n) { at[n.id] = n; });
+      var boxes = spec.groups.map(function (g) {
+        var ms = g.nodes.map(function (id) { return at[id]; });
+        return { g: g, r0: Math.min.apply(null, ms.map(function (n) { return n.row; })), r1: Math.max.apply(null, ms.map(function (n) { return n.row; })),
+          c0: Math.min.apply(null, ms.map(function (n) { return n.col; })), c1: Math.max.apply(null, ms.map(function (n) { return n.col; })) };
+      });
+      var covered = [];
+      boxes.forEach(function (b) {
+        placed.nodes.forEach(function (n) { if (b.g.nodes.indexOf(n.id) < 0 && n.row >= b.r0 && n.row <= b.r1 && n.col >= b.c0 && n.col <= b.c1) covered.push(b.g.label + '∋' + n.id); });
+      });
+      check(flow + ': no zone covers a node outside it', covered.length === 0, covered.join(' ') + ' :: ' + JSON.stringify(placed.nodes));
+      var a = boxes[0], b = boxes[1];
+      check(flow + ': zone boxes do not overlap', a.r1 < b.r0 || b.r1 < a.r0 || a.c1 < b.c0 || b.c1 < a.c0, JSON.stringify(boxes));
+      check(flow + ': no two nodes share a cell', new Set(placed.nodes.map(function (n) { return n.col + ',' + n.row; })).size === 5, JSON.stringify(placed.nodes));
+    });
+  });
   E2E.suite('store: documents', function () {
     var S = Studio.store, first = S.docs.current();
     S.update(function (s) { s.title = 'Doc one'; });

@@ -99,17 +99,46 @@
   // Auto-placement. Nodes without both col and row get a cell; placed nodes are pinned. Layers follow the edges
   // (longest path from the sources, cycles broken at back edges); within a layer, barycentre sweeps pull each
   // node towards its neighbours, then it takes the nearest free cells at or after the previous node in its layer.
+  // A zone given by two or more unplaced nodes, none of them in another zone, is laid out on its own first and then
+  // placed as one rectangular block, so no other node lands inside it and zones never overlap.
   // Pure: returns a copy of the spec and never touches the DOM. A spec with every node placed is returned as is.
   function isInt(v) { return typeof v === 'number' && isFinite(v) && Math.floor(v) === v && v >= 0; }
+  function zoneBlocks(spec, right) {                                // → { id: block } for every member of a blockable zone
+    var nodeById = Object.create(null), zoned = Object.create(null), out = Object.create(null), seen = Object.create(null);
+    (spec.nodes || []).forEach(function (n) { if (n.id !== undefined) { seen[n.id] = (seen[n.id] || 0) + 1; nodeById[n.id] = n; } });
+    var zones = (spec.groups || []).filter(function (g) { return g && Array.isArray(g.nodes); });
+    zones.forEach(function (g) { g.nodes.forEach(function (id) { zoned[id] = (zoned[id] || 0) + 1; }); });
+    zones.forEach(function (g) {
+      var ms = g.nodes.map(function (id) { return nodeById[id]; });
+      if (ms.length < 2 || ms.some(function (n, k) { return !n || zoned[n.id] > 1 || seen[n.id] > 1 || g.nodes.indexOf(n.id) !== k || (isInt(n.col) && isInt(n.row)); })) return;
+      var inner = place({ flow: spec.flow, nodes: ms, edges: (spec.edges || []).filter(function (e) {
+        return g.nodes.indexOf(e.from) >= 0 && g.nodes.indexOf(e.to) >= 0;
+      }) }).nodes;
+      var block = { offset: {}, lsize: 0, osize: 0 }, l0 = Infinity, p0 = Infinity;
+      inner.forEach(function (n) { l0 = Math.min(l0, right ? n.col : n.row); p0 = Math.min(p0, right ? n.row : n.col); });
+      inner.forEach(function (n) {
+        var span = isInt(n.colspan) && n.colspan > 0 ? n.colspan : 1, l = (right ? n.col : n.row) - l0, p = (right ? n.row : n.col) - p0;
+        block.offset[n.id] = { l: l, p: p };
+        block.lsize = Math.max(block.lsize, l + (right ? span : 1)); block.osize = Math.max(block.osize, p + (right ? 1 : span));
+      });
+      g.nodes.forEach(function (id) { out[id] = block; });
+    });
+    return out;
+  }
   function place(spec) {
     var nodes = (spec && spec.nodes) || [];
     if (nodes.every(function (n) { return isInt(n.col) && isInt(n.row); })) return spec;
-    var right = spec.flow === 'right', byId = {}, info = [], occ = {};
+    var right = spec.flow === 'right', byId = {}, info = [], occ = {}, nodeInfo = [], blocks = zoneBlocks(spec, right);
     nodes.forEach(function (n, i) {
-      var span = isInt(n.colspan) && n.colspan > 0 ? n.colspan : 1, fixed = isInt(n.col) && isInt(n.row);
-      var d = { n: n, i: i, fixed: fixed, lsize: right ? span : 1, osize: right ? 1 : span, up: [], down: [] };
-      if (fixed) { d.layer = right ? n.col : n.row; d.pos = right ? n.row : n.col; }
-      info.push(d); if (n.id !== undefined) byId[n.id] = d;
+      var block = n.id !== undefined ? blocks[n.id] : undefined, d;
+      if (block && block.d) { nodeInfo.push(block.d); byId[n.id] = block.d; return; }
+      if (block) d = block.d = { block: block, i: i, fixed: false, lsize: block.lsize, osize: block.osize, up: [], down: [] };
+      else {
+        var span = isInt(n.colspan) && n.colspan > 0 ? n.colspan : 1, fixed = isInt(n.col) && isInt(n.row);
+        d = { n: n, i: i, fixed: fixed, lsize: right ? span : 1, osize: right ? 1 : span, up: [], down: [] };
+        if (fixed) { d.layer = right ? n.col : n.row; d.pos = right ? n.row : n.col; }
+      }
+      info.push(d); nodeInfo.push(d); if (n.id !== undefined) byId[n.id] = d;
     });
     function key(l, o) { return l + ',' + o; }
     function mark(d, v) { for (var a = 0; a < d.lsize; a++) for (var b = 0; b < d.osize; b++) occ[key(d.layer + a, d.pos + b)] = v; }
@@ -147,7 +176,7 @@
     var MAX_ROW = 4, skip = {};
     for (var guard = 0; !right && guard < info.length * 2; guard++) {
       var width = {}, over = -1;
-      info.forEach(function (d) { width[d.layer] = (width[d.layer] || 0) + d.osize; });
+      info.forEach(function (d) { for (var a = 0; a < d.lsize; a++) width[d.layer + a] = (width[d.layer + a] || 0) + d.osize; });
       Object.keys(width).map(Number).sort(function (a, b) { return a - b; }).some(function (l) { if (width[l] > MAX_ROW && !skip[l]) { over = l; return true; } return false; });
       if (over < 0) break;
       var used = 0, moved = false;
@@ -206,10 +235,12 @@
 
     var shift = info.some(function (d) { return d.fixed; }) ? 0 : Math.min.apply(null, info.map(function (d) { return d.pos; }));
     var copy = {}; for (var k in spec) copy[k] = spec[k];
-    copy.nodes = info.map(function (d) {
+    copy.nodes = nodes.map(function (src, i) {
+      var d = nodeInfo[i];
       if (d.fixed) return d.n;
-      var n = {}; for (var f in d.n) n[f] = d.n[f];
-      n.col = right ? d.layer : d.pos - shift; n.row = right ? d.pos - shift : d.layer;
+      var n = {}; for (var f in src) n[f] = src[f];
+      var off = d.block ? d.block.offset[src.id] : { l: 0, p: 0 }, layer = d.layer + off.l, pos = d.pos + off.p - shift;
+      n.col = right ? layer : pos; n.row = right ? pos : layer;
       return n;
     });
     return copy;

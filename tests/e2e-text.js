@@ -187,6 +187,68 @@
     check('unrecognized line is a warning, not an error (some content still usable)', garbled.errors.length === 0, JSON.stringify(garbled));
   });
 
+  E2E.suite('text: parseMermaid styled architecture (init, :::class, quoted shapes, nested + endpoint subgraphs)', function () {
+    var r = T.parseMermaid([
+      "%%{init: {'theme': 'dark'}}%%",
+      'graph TB',
+      '    classDef svc fill:#10b981,color:#fff;',
+      '    subgraph Edge ["🔒 Perimeter & Routing"]',
+      '        GW["🚀 API Gateway (Kong)"]:::svc',
+      '        DNS[("🌐 Route 53 DNS")]',
+      '    end',
+      '    subgraph Core ["⚙️ Core"]',
+      '        direction LR',
+      '        subgraph Users ["👤 Users"]',
+      '            US["User Service"]:::svc',
+      '            UDb[("🗄️ User DB (PostgreSQL)")]:::svc',
+      '            US <--> UDb',
+      '        end',
+      '    end',
+      '    Bus{{"📨 Kafka [events]"}}:::svc',
+      '    DNS --> GW',
+      '    GW <-->|Validate JWT| US',
+      '    Core -.->|Scrape Metrics| Prom["Prometheus"]',
+      '    class GW,US svc;'
+    ].join('\n'));
+    check('no errors', r.errors.length === 0, JSON.stringify(r.errors));
+    if (!r.spec) return;
+    var byId = {}; r.spec.nodes.forEach(function (n) { byId[n.id] = n; });
+    check('exactly the declared nodes (no "direction", no subgraph-id nodes)', canon(Object.keys(byId).sort()) === canon(['Bus', 'DNS', 'GW', 'Prom', 'UDb', 'US']), JSON.stringify(Object.keys(byId)));
+    check('quoted label with parens inside [] keeps them', byId.GW.label === '🚀 API Gateway (Kong)' && byId.GW.kind === undefined, JSON.stringify(byId.GW));
+    check('quoted cylinder label with parens -> kind db', canon(byId.UDb) === canon({ id: 'UDb', label: '🗄️ User DB (PostgreSQL)', kind: 'db' }), JSON.stringify(byId.UDb));
+    check('hexagon with a quoted label holding brackets -> box', canon(byId.Bus) === canon({ id: 'Bus', label: '📨 Kafka [events]' }), JSON.stringify(byId.Bus));
+    check('zone labels are unquoted; nested outer zone with no own nodes is dropped',
+      canon(r.spec.groups) === canon([{ label: '🔒 Perimeter & Routing', nodes: ['GW', 'DNS'] }, { label: '👤 Users', nodes: ['US', 'UDb'] }]), JSON.stringify(r.spec.groups));
+    var edges = r.spec.edges || [];
+    check('edge from a subgraph attaches to its first (nested) node, keeping dash + label',
+      edges.some(function (e) { return canon(e) === canon({ from: 'US', to: 'Prom', dash: true, label: 'Scrape Metrics' }); }), JSON.stringify(edges));
+    check('4 edges', edges.length === 4, JSON.stringify(edges));
+    function warned(s) { return r.warnings.filter(function (w) { return w.message.indexOf(s) >= 0; }).length; }
+    check('no trailing-text warnings', warned('unrecognized trailing text') === 0, JSON.stringify(r.warnings));
+    check('":::" and "direction" each warn once', warned('":::"') === 1 && warned('"direction"') === 1, JSON.stringify(r.warnings));
+    check('subgraph endpoint is warned on its line', r.warnings.some(function (w) { return w.line === 19 && w.message.indexOf('"Core"') >= 0 && w.message.indexOf('"US"') >= 0; }), JSON.stringify(r.warnings));
+    check('hexagon warned', warned('hexagon shape rendered as a box') === 1, JSON.stringify(r.warnings));
+  });
+
+  E2E.suite('text: parseMermaid edge cases for classes, quoted labels and subgraph endpoints', function () {
+    var a = T.parseMermaid('flowchart TD\nA:::foo --> B');
+    check('A:::foo --> B gives nodes A, B and edge A->B', a.spec && canon(a.spec.nodes) === canon([{ id: 'A', label: 'A' }, { id: 'B', label: 'B' }]) &&
+      canon(a.spec.edges) === canon([{ from: 'A', to: 'B' }]), JSON.stringify(a.spec));
+    var e = T.parseMermaid('flowchart TD\nA\nsubgraph S\nend\nS --> A');
+    check('edge to an empty subgraph is dropped with a warning, no node "S"', e.spec && e.spec.nodes.length === 1 && !e.spec.edges &&
+      e.warnings.some(function (w) { return w.line === 5 && w.message.indexOf('"S" has no nodes') >= 0; }), JSON.stringify(e));
+    var before = T.parseMermaid('flowchart TD\nX --> S\nsubgraph S\n  Y\nend');
+    check('edge naming a subgraph declared later still resolves', before.spec && canon(before.spec.edges) === canon([{ from: 'X', to: 'Y' }]), JSON.stringify(before.spec));
+    var self = T.parseMermaid('flowchart TD\nsubgraph S\n  Y\nend\nS --> Y');
+    check('edge that resolves to a self-loop is dropped with a warning', self.spec && !self.spec.edges &&
+      self.warnings.some(function (w) { return w.message.indexOf('to itself') >= 0; }), JSON.stringify(self));
+    var q = T.parseMermaid('flowchart TD\nX["a [b]"] --> Y[("a (b)")]');
+    check('quoted labels hold brackets', q.spec && q.spec.nodes[0].label === 'a [b]' && q.spec.nodes[1].label === 'a (b)' && q.spec.nodes[1].kind === 'db', JSON.stringify(q.spec));
+    var u = T.parseMermaid('flowchart TD\nX["abc --> Y');
+    check('unterminated quoted label: node keeps its id, rest is a trailing-text warning', u.errors.length === 0 && u.spec.nodes[0].label === 'X' &&
+      u.warnings.some(function (w) { return w.message.indexOf('unrecognized trailing text') >= 0; }), JSON.stringify(u));
+  });
+
   // ------------------------------------------------------------ mount() sync ----
   E2E.suite('text: mount() two-way sync', function () {
     var S = Studio.store;
